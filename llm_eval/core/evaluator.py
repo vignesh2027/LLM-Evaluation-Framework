@@ -12,15 +12,15 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 import litellm
 
 from llm_eval.database.models import Database
 from llm_eval.metrics.accuracy import AccuracyMetric
+from llm_eval.metrics.cost import CostMetric
 from llm_eval.metrics.hallucination import HallucinationMetric
 from llm_eval.metrics.latency import LatencyMetric
-from llm_eval.metrics.cost import CostMetric
 
 
 @dataclass
@@ -53,7 +53,7 @@ class SampleResult:
     cost_usd: float
     hallucination_score: float
     reasoning_score: float
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass
@@ -75,7 +75,7 @@ class EvaluationResult:
     avg_reasoning_score: float
     samples: list[SampleResult]
     created_at: datetime = field(default_factory=datetime.utcnow)
-    config: Optional[EvaluationConfig] = None
+    config: EvaluationConfig | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {

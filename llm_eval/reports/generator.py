@@ -8,9 +8,7 @@ the ReportLab library.
 
 from __future__ import annotations
 
-import io
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -50,16 +48,16 @@ class ReportGenerator:
         try:
             from reportlab.lib import colors  # type: ignore
             from reportlab.lib.pagesizes import A4  # type: ignore
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # type: ignore
+            from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet  # type: ignore
             from reportlab.lib.units import cm  # type: ignore
             from reportlab.platypus import (  # type: ignore
-                SimpleDocTemplate,
+                HRFlowable,
+                PageBreak,
                 Paragraph,
+                SimpleDocTemplate,
                 Spacer,
                 Table,
                 TableStyle,
-                HRFlowable,
-                PageBreak,
             )
         except ImportError:
             raise RuntimeError(

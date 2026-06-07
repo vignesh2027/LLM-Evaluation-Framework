@@ -12,14 +12,14 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
 class EvaluationRecord:
     """Flat row representation stored in SQLite."""
 
-    id: Optional[int]
+    id: int | None
     run_id: str
     model: str
     benchmark: str
@@ -142,8 +142,8 @@ class Database:
 
     def list_results(
         self,
-        model: Optional[str] = None,
-        benchmark: Optional[str] = None,
+        model: str | None = None,
+        benchmark: str | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         """Query stored results with optional filters."""
@@ -162,7 +162,7 @@ class Database:
             rows = conn.execute(query, params).fetchall()
         return [EvaluationRecord(**dict(row)).to_dict() for row in rows]
 
-    def get_result(self, run_id: str) -> Optional[dict[str, Any]]:
+    def get_result(self, run_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM evaluations WHERE run_id = ?", (run_id,)

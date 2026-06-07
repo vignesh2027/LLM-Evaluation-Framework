@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import re
 
-
 # Phrases that suggest hallucination / confabulation
 _HALLUCINATION_SIGNALS = [
     r"\bas of my (last|latest|recent) (update|training|knowledge)\b",

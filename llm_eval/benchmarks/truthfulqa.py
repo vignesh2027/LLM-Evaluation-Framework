@@ -12,7 +12,6 @@ import logging
 import os
 import random
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ class TruthfulQABenchmark:
     NAME = "truthfulqa"
     DESCRIPTION = "TruthfulQA — 817 questions designed to test factual truthfulness"
 
-    def __init__(self, cache_dir: Optional[str] = None):
+    def __init__(self, cache_dir: str | None = None):
         self.cache_dir = Path(cache_dir or os.path.expanduser("~/.cache/llm_eval/truthfulqa"))
 
     def load(self, num_samples: int = 100, seed: int = 42) -> list[dict[str, str]]:
@@ -65,7 +64,7 @@ class TruthfulQABenchmark:
                 if not choices or not labels_raw:
                     continue
                 labels = ["A", "B", "C", "D"][: len(choices)]
-                choices_text = "\n".join(f"{l}) {c}" for l, c in zip(labels, choices))
+                choices_text = "\n".join(f"{lbl}) {c}" for lbl, c in zip(labels, choices))
                 correct_idx = next((i for i, v in enumerate(labels_raw) if v == 1), 0)
                 expected = labels[correct_idx] if correct_idx < len(labels) else "A"
                 prompt = f"{row['question']}\n{choices_text}\nAnswer:"

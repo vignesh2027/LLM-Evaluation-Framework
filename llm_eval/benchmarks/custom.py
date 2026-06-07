@@ -12,7 +12,6 @@ import io
 import json
 import logging
 from pathlib import Path
-from typing import Union
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ class CustomBenchmark:
         self._samples = samples
 
     @classmethod
-    def from_file(cls, path: Union[str, Path]) -> "CustomBenchmark":
+    def from_file(cls, path: str | Path) -> CustomBenchmark:
         """Load from a CSV or JSON file path."""
         path = Path(path)
         if not path.exists():
@@ -47,7 +46,7 @@ class CustomBenchmark:
         raise ValueError(f"Unsupported file format: {suffix}. Use .csv or .json")
 
     @classmethod
-    def from_string(cls, content: str, format: str = "csv") -> "CustomBenchmark":
+    def from_string(cls, content: str, format: str = "csv") -> CustomBenchmark:
         """Load from a string (for file-upload widgets)."""
         if format == "csv":
             return cls(cls._load_csv(content))

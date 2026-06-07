@@ -12,7 +12,6 @@ import logging
 import os
 import random
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +52,7 @@ class MMLUBenchmark:
     DESCRIPTION = "Massive Multitask Language Understanding — 57 academic subjects"
     NUM_SUBJECTS = 57
 
-    def __init__(self, cache_dir: Optional[str] = None, subject: str = "all"):
+    def __init__(self, cache_dir: str | None = None, subject: str = "all"):
         self.cache_dir = Path(cache_dir or os.path.expanduser("~/.cache/llm_eval/mmlu"))
         self.subject = subject
 

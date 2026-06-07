@@ -19,12 +19,8 @@ from __future__ import annotations
 
 import asyncio
 import io
-import json
 import os
-import sys
 import tempfile
-from pathlib import Path
-from typing import Optional
 
 import streamlit as st
 
@@ -41,11 +37,11 @@ try:
     import pandas as pd
     import plotly.express as px
     import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-    from llm_eval.core.evaluator import LLMEvaluator, EvaluationConfig
+
+    from llm_eval.benchmarks.custom import CustomBenchmark
     from llm_eval.benchmarks.mmlu import MMLUBenchmark
     from llm_eval.benchmarks.truthfulqa import TruthfulQABenchmark
-    from llm_eval.benchmarks.custom import CustomBenchmark
+    from llm_eval.core.evaluator import EvaluationConfig, LLMEvaluator
     from llm_eval.database.models import Database
     from llm_eval.metrics.cost import CostMetric
     from llm_eval.reports.generator import ReportGenerator

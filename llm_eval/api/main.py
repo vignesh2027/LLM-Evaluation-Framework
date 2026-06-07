@@ -17,20 +17,18 @@ Endpoints:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import tempfile
-from typing import Optional
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from llm_eval.core.evaluator import LLMEvaluator, EvaluationConfig
+from llm_eval.benchmarks.custom import CustomBenchmark
 from llm_eval.benchmarks.mmlu import MMLUBenchmark
 from llm_eval.benchmarks.truthfulqa import TruthfulQABenchmark
-from llm_eval.benchmarks.custom import CustomBenchmark
+from llm_eval.core.evaluator import EvaluationConfig, LLMEvaluator
 from llm_eval.database.models import Database
 from llm_eval.metrics.cost import CostMetric
 from llm_eval.reports.generator import ReportGenerator
@@ -183,8 +181,8 @@ async def evaluate_custom(
 
 @app.get("/results")
 async def list_results(
-    model: Optional[str] = None,
-    benchmark: Optional[str] = None,
+    model: str | None = None,
+    benchmark: str | None = None,
     limit: int = 50,
 ):
     records = _db.list_results(model=model, benchmark=benchmark, limit=limit)

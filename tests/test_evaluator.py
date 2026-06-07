@@ -4,15 +4,12 @@ All tests use mocked LiteLLM responses — no real API keys required.
 Run: pytest tests/ -v --cov=llm_eval --cov-report=term-missing
 """
 
-import asyncio
 import json
 import os
 import sys
 import tempfile
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 

@@ -63,7 +63,7 @@ class LatencyMetric:
         """Return fraction of requests exceeding the SLA threshold."""
         if not latencies_ms:
             return 0.0
-        violations = sum(1 for l in latencies_ms if l > threshold_ms)
+        violations = sum(1 for ms in latencies_ms if ms > threshold_ms)
         return violations / len(latencies_ms)
 
     def classify(self, avg_ms: float) -> str:

@@ -15,15 +15,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import sys
 from pathlib import Path
 
 import click
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
-from rich.table import Table
 from rich import box
+from rich.console import Console
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
+from rich.table import Table
 
 console = Console()
 
@@ -66,7 +65,7 @@ def cli(ctx: click.Context, verbose: bool) -> None:
 @click.pass_context
 def run_cmd(ctx, model, benchmark, samples, temperature, max_tokens, concurrency, output):
     """Run a single model evaluation."""
-    from llm_eval.core.evaluator import LLMEvaluator, EvaluationConfig
+    from llm_eval.core.evaluator import EvaluationConfig, LLMEvaluator
 
     console.print(f"\n[bold blue]LLM Evaluator[/bold blue] — {model} on {benchmark} ({samples} samples)\n")
 
@@ -130,7 +129,7 @@ def run_cmd(ctx, model, benchmark, samples, temperature, max_tokens, concurrency
 @click.option("--output", "-o", default=None, help="Save JSON results to this path")
 def compare_cmd(models, benchmark, samples, output):
     """Compare multiple models side-by-side on the same samples."""
-    from llm_eval.core.evaluator import LLMEvaluator, EvaluationConfig
+    from llm_eval.core.evaluator import EvaluationConfig, LLMEvaluator
 
     if len(models) < 2:
         raise click.UsageError("Provide at least 2 models with --models")
