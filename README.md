@@ -2,7 +2,7 @@
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=200&section=header&text=LLM%20Evaluation%20Framework&fontSize=50&fontColor=fff&animation=twinkling&fontAlignY=40&desc=Production-Grade%20LLM%20Benchmarking%20%E2%80%94%20GPT-4%20%E2%80%A2%20Claude%20%E2%80%A2%20Gemini%20%E2%80%A2%20Mistral%20%E2%80%A2%20Llama&descAlignY=65&descSize=18" />
 
-# 🧠 LLM Evaluation Framework
+# LLM Evaluation Framework
 
 <p align="center">
   <strong>The most complete open-source LLM evaluation suite.</strong><br/>
