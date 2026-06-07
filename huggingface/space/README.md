@@ -20,7 +20,7 @@ tags:
   - accuracy
   - hallucination
   - latency
-short_description: Benchmark any LLM on accuracy, latency, cost, hallucination, and reasoning quality.
+short_description: Benchmark LLMs on accuracy, cost, and hallucination.
 ---
 
 # LLM Evaluation Framework — Demo
