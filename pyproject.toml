@@ -23,4 +23,10 @@ addopts = "--cov=llm_eval --cov-report=term-missing --cov-report=xml"
 
 [tool.coverage.run]
 source = ["llm_eval"]
-omit = ["tests/*", "llm_eval/dashboard/*"]
+omit = [
+    "tests/*",
+    "llm_eval/dashboard/*",
+    "llm_eval/api/*",
+    "llm_eval/cli/*",
+    "llm_eval/reports/*",
+]
