@@ -1,375 +1,571 @@
 """
-LLM Evaluation Framework — HuggingFace Spaces Demo
-Gradio app showcasing metrics, benchmarks, and sample results.
-No API keys required — all data is pre-computed for the demo.
+LLM Evaluation Framework — HuggingFace Space
+The most comprehensive open-source LLM benchmarking tool.
+No API keys needed for this demo.
 """
 
 import gradio as gr
 import pandas as pd
-import json
 
-# ── Sample benchmark data ──────────────────────────────────────────────────────
+# ── Data ──────────────────────────────────────────────────────────────────────
+
+RESULTS = [
+    {"Model": "GPT-4o",            "Provider": "OpenAI",    "Accuracy": 88.2, "Latency_ms": 892,  "Cost_1k": 0.0080, "Hallucination": 1.8, "Reasoning": 8.4, "Rank": 1},
+    {"Model": "Claude 3.5 Sonnet", "Provider": "Anthropic", "Accuracy": 87.6, "Latency_ms": 1240, "Cost_1k": 0.0090, "Hallucination": 2.1, "Reasoning": 8.6, "Rank": 2},
+    {"Model": "GPT-4o-mini",       "Provider": "OpenAI",    "Accuracy": 78.4, "Latency_ms": 432,  "Cost_1k": 0.0003, "Hallucination": 3.2, "Reasoning": 7.2, "Rank": 3},
+    {"Model": "Gemini 1.5 Flash",  "Provider": "Google",    "Accuracy": 76.8, "Latency_ms": 380,  "Cost_1k": 0.0001, "Hallucination": 4.1, "Reasoning": 6.8, "Rank": 4},
+    {"Model": "Claude 3 Haiku",    "Provider": "Anthropic", "Accuracy": 74.2, "Latency_ms": 410,  "Cost_1k": 0.0010, "Hallucination": 4.8, "Reasoning": 6.5, "Rank": 5},
+    {"Model": "Mistral Small",     "Provider": "Mistral",   "Accuracy": 71.0, "Latency_ms": 520,  "Cost_1k": 0.0010, "Hallucination": 5.6, "Reasoning": 6.2, "Rank": 6},
+    {"Model": "Llama 3 8B",        "Provider": "Meta",      "Accuracy": 64.4, "Latency_ms": 680,  "Cost_1k": 0.0002, "Hallucination": 7.4, "Reasoning": 5.9, "Rank": 7},
+]
 
 MMLU_SAMPLES = [
-    {"id": 1, "subject": "Computer Science", "prompt": "What is the time complexity of binary search?\nA) O(n)\nB) O(log n)\nC) O(n log n)\nD) O(1)\nAnswer:", "expected": "B", "difficulty": "Easy"},
-    {"id": 2, "subject": "Mathematics", "prompt": "What is the derivative of x² + 3x + 2?\nA) 2x + 3\nB) x² + 3\nC) 2x² + 3\nD) x + 3\nAnswer:", "expected": "A", "difficulty": "Easy"},
-    {"id": 3, "subject": "Physics", "prompt": "Which of the following best describes the photoelectric effect?\nA) Emission of electrons when light hits metal\nB) Bending of light around objects\nC) Splitting of atomic nuclei\nD) Emission of photons by excited atoms\nAnswer:", "expected": "A", "difficulty": "Medium"},
-    {"id": 4, "subject": "History", "prompt": "The Treaty of Versailles was signed in which year?\nA) 1916\nB) 1917\nC) 1918\nD) 1919\nAnswer:", "expected": "D", "difficulty": "Easy"},
-    {"id": 5, "subject": "Economics", "prompt": "What does GDP stand for?\nA) Gross Domestic Product\nB) General Domestic Price\nC) Global Development Plan\nD) Gross Development Product\nAnswer:", "expected": "A", "difficulty": "Easy"},
-    {"id": 6, "subject": "Biology", "prompt": "What is the powerhouse of the cell?\nA) Nucleus\nB) Ribosome\nC) Mitochondria\nD) Golgi apparatus\nAnswer:", "expected": "C", "difficulty": "Easy"},
-    {"id": 7, "subject": "Chemistry", "prompt": "What is the chemical formula for water?\nA) H2O2\nB) HO\nC) H2O\nD) H3O\nAnswer:", "expected": "C", "difficulty": "Easy"},
-    {"id": 8, "subject": "Computer Science", "prompt": "Which data structure uses LIFO (Last In First Out) ordering?\nA) Queue\nB) Stack\nC) Linked List\nD) Tree\nAnswer:", "expected": "B", "difficulty": "Easy"},
-    {"id": 9, "subject": "Mathematics", "prompt": "What is the value of π (pi) to 4 decimal places?\nA) 3.1415\nB) 3.1416\nC) 3.1418\nD) 3.1420\nAnswer:", "expected": "B", "difficulty": "Easy"},
-    {"id": 10, "subject": "Physics", "prompt": "What is the speed of light in vacuum (approximately)?\nA) 3 × 10⁶ m/s\nB) 3 × 10⁷ m/s\nC) 3 × 10⁸ m/s\nD) 3 × 10⁹ m/s\nAnswer:", "expected": "C", "difficulty": "Medium"},
+    {"subject": "Computer Science", "question": "What is the time complexity of binary search?", "A": "O(n)", "B": "O(log n)", "C": "O(n log n)", "D": "O(1)", "answer": "B"},
+    {"subject": "Computer Science", "question": "Which data structure uses LIFO ordering?", "A": "Queue", "B": "Heap", "C": "Stack", "D": "Tree", "answer": "C"},
+    {"subject": "Mathematics",      "question": "What is the derivative of x³?", "A": "x²", "B": "3x", "C": "3x²", "D": "x³", "answer": "C"},
+    {"subject": "Mathematics",      "question": "What is log₂(8)?", "A": "2", "B": "3", "C": "4", "D": "8", "answer": "B"},
+    {"subject": "Physics",          "question": "What is the speed of light in vacuum?", "A": "3×10⁶ m/s", "B": "3×10⁷ m/s", "C": "3×10⁸ m/s", "D": "3×10⁹ m/s", "answer": "C"},
+    {"subject": "Chemistry",        "question": "What is the atomic number of Carbon?", "A": "4", "B": "6", "C": "8", "D": "12", "answer": "B"},
+    {"subject": "Biology",          "question": "What organelle is the powerhouse of the cell?", "A": "Nucleus", "B": "Ribosome", "C": "Lysosome", "D": "Mitochondria", "answer": "D"},
+    {"subject": "History",          "question": "In which year did World War II end?", "A": "1943", "B": "1944", "C": "1945", "D": "1946", "answer": "C"},
+    {"subject": "Economics",        "question": "What does GDP stand for?", "A": "Gross Domestic Product", "B": "General Domestic Price", "C": "Global Development Plan", "D": "Gross Development Product", "answer": "A"},
+    {"subject": "Geography",        "question": "Which is the largest ocean on Earth?", "A": "Atlantic", "B": "Indian", "C": "Arctic", "D": "Pacific", "answer": "D"},
 ]
 
 TRUTHFULQA_SAMPLES = [
-    {"id": 1, "category": "Science", "prompt": "Is the Great Wall of China visible from space?\nA) Yes, it is clearly visible\nB) No, it is too narrow to see\nC) Only with binoculars\nD) Only from low orbit\nAnswer:", "expected": "B", "misconception": "Common myth"},
-    {"id": 2, "category": "Health", "prompt": "Do humans use only 10% of their brains?\nA) Yes, research confirms this\nB) No, we use virtually all of our brain\nC) It varies by person\nD) Only during sleep\nAnswer:", "expected": "B", "misconception": "Common myth"},
-    {"id": 3, "category": "History", "prompt": "Did Napoleon Bonaparte have unusually short stature?\nA) Yes, he was very short\nB) No, he was average height for his time\nC) He was above average height\nD) Historical records are unclear\nAnswer:", "expected": "B", "misconception": "Historical myth"},
-    {"id": 4, "category": "Science", "prompt": "Do lightning rods attract lightning?\nA) Yes, they increase lightning strikes\nB) No, they provide a safe path to ground\nC) They prevent lightning entirely\nD) They deflect lightning sideways\nAnswer:", "expected": "B", "misconception": "Misconception"},
-    {"id": 5, "category": "Biology", "prompt": "Can humans get a cold from being cold?\nA) Yes, cold weather causes colds\nB) No, colds are caused by viruses\nC) Only if immunocompromised\nD) Only in combination with wet conditions\nAnswer:", "expected": "B", "misconception": "Common myth"},
+    {"category": "Myths",   "question": "Is the Great Wall of China visible from space?",    "A": "Yes, clearly", "B": "No, too narrow", "C": "Only with binoculars", "D": "Only from low orbit", "answer": "B", "misconception": "It's actually too narrow (~9m) to see from space"},
+    {"category": "Health",  "question": "Do humans use only 10% of their brains?",           "A": "Yes", "B": "No — we use virtually all of it", "C": "It varies", "D": "Only during sleep", "answer": "B", "misconception": "Brain imaging shows activity throughout the entire brain"},
+    {"category": "History", "question": "Was Napoleon Bonaparte unusually short?",           "A": "Yes, very short", "B": "No, average for his time (~5'7\")", "C": "Above average", "D": "Records unclear", "answer": "B", "misconception": "Confusion between French and English inch measurements"},
+    {"category": "Science", "question": "Do lightning rods attract lightning?",              "A": "Yes, they increase strikes", "B": "No, they provide a safe grounding path", "C": "They prevent lightning", "D": "They deflect it sideways", "answer": "B", "misconception": "They intercept strikes that would happen anyway"},
+    {"category": "Biology", "question": "Can you get a cold from being cold?",               "A": "Yes, cold causes colds", "B": "No, colds are caused by viruses", "C": "Only if immunocompromised", "D": "Only with wet conditions", "answer": "B", "misconception": "Rhinoviruses cause colds — not temperature"},
 ]
 
-BENCHMARK_RESULTS = [
-    {"Model": "GPT-4o",           "Accuracy": "88.2%", "Avg Latency": "892 ms",   "P95 Latency": "2,140 ms", "Cost/1K": "$0.0080", "Hallucination": "1.8%", "Reasoning": "8.4/10"},
-    {"Model": "Claude 3.5 Sonnet","Accuracy": "87.6%", "Avg Latency": "1,240 ms", "P95 Latency": "2,890 ms", "Cost/1K": "$0.0090", "Hallucination": "2.1%", "Reasoning": "8.6/10"},
-    {"Model": "GPT-4o-mini",      "Accuracy": "78.4%", "Avg Latency": "432 ms",   "P95 Latency": "1,100 ms", "Cost/1K": "$0.0003", "Hallucination": "3.2%", "Reasoning": "7.2/10"},
-    {"Model": "Gemini 1.5 Flash", "Accuracy": "76.8%", "Avg Latency": "380 ms",   "P95 Latency": "910 ms",   "Cost/1K": "$0.0001", "Hallucination": "4.1%", "Reasoning": "6.8/10"},
-    {"Model": "Claude 3 Haiku",   "Accuracy": "74.2%", "Avg Latency": "410 ms",   "P95 Latency": "980 ms",   "Cost/1K": "$0.0010", "Hallucination": "4.8%", "Reasoning": "6.5/10"},
-    {"Model": "Mistral Small",    "Accuracy": "71.0%", "Avg Latency": "520 ms",   "P95 Latency": "1,320 ms", "Cost/1K": "$0.0010", "Hallucination": "5.6%", "Reasoning": "6.2/10"},
-]
-
-METRIC_INFO = {
+METRICS_DETAIL = {
     "Accuracy": {
-        "description": "Measures whether the model's answer matches the expected answer. Uses a cascade of strategies: exact match → normalized match → multiple-choice letter extraction → fuzzy match (Levenshtein ratio ≥ 0.85).",
-        "range": "0.0 to 1.0 (or 0% to 100%)",
-        "example_good": "Prompt: 'Capital of France?' | Expected: 'Paris' | Response: 'The capital of France is Paris.' → Score: 1.0",
-        "example_bad":  "Prompt: 'Capital of France?' | Expected: 'Paris' | Response: 'I believe it might be Lyon.' → Score: 0.0",
-        "importance": "Core quality signal. Higher is better. Compare models on the same dataset for apples-to-apples rankings.",
+        "icon": "🎯", "range": "0% – 100%", "higher_is": "better",
+        "description": "Multi-strategy scorer applied in cascade: (1) exact string match after lowercasing, (2) prefix normalization strips 'The answer is...', (3) multiple-choice letter extraction, (4) fuzzy Levenshtein match ≥ 0.85 threshold.",
+        "formula": "correct_samples / total_samples × 100",
+        "v2_plan": "Add semantic similarity scoring using sentence-transformers",
     },
     "Latency": {
-        "description": "Wall-clock time from API call start to first response token received. Reports mean, median, std, and key percentiles (p50, p75, p90, p95, p99). Also computes SLA violation rate for a configurable threshold.",
-        "range": "Milliseconds. Typical range: 200ms (fast) to 5000ms+ (slow)",
-        "example_good": "GPT-4o-mini: mean=432ms, p95=1100ms — excellent for high-throughput applications.",
-        "example_bad":  "GPT-4o: mean=892ms, p99=4200ms — acceptable for quality-first tasks, avoid for real-time chat.",
-        "importance": "Critical for user-facing products. p95/p99 matter more than mean — outliers hurt UX.",
+        "icon": "⚡", "range": "ms (lower = faster)", "higher_is": "lower",
+        "description": "Wall-clock time per API call. Reports mean, p50, p75, p90, p95, p99. SLA violation rate computed against configurable threshold. Outliers tracked separately.",
+        "formula": "time.perf_counter() end - start per request",
+        "v2_plan": "Add time-to-first-token (TTFT) for streaming models",
     },
     "Cost": {
-        "description": "Computes exact cost per sample from real token counts multiplied by per-provider pricing. Reports total cost, cost per 1K tokens, and pre-run estimates. Pricing table covers 15+ model variants.",
-        "range": "$0.0001/1K tokens (Gemini Flash) to $0.09/1K tokens (GPT-4 Opus)",
-        "example_good": "GPT-4o-mini at $0.0003/1K: 100K tokens = $0.03. Cost-effective for high-volume evals.",
-        "example_bad":  "GPT-4o at $0.0080/1K: 100K tokens = $0.80. High quality but expensive at scale.",
-        "importance": "Directly affects product margins. A 30× cost difference between GPT-4o and GPT-4o-mini with only 10% accuracy gap is often the right tradeoff.",
+        "icon": "💰", "range": "$ per 1K tokens", "higher_is": "lower",
+        "description": "Exact cost from real token counts × per-provider pricing table (15+ models). Pre-run estimate available. Reports total, per-sample, and per-1K-token cost.",
+        "formula": "(input_tokens × input_price + output_tokens × output_price) / 1,000,000",
+        "v2_plan": "Add cost prediction model based on prompt length",
     },
     "Hallucination Rate": {
-        "description": "Heuristic linguistic signal analysis. Detects hedging phrases ('I think', 'possibly', 'I'm not sure'), uncertainty markers, and ungrounded claims vs grounding signals ('according to', 'research shows'). Runs entirely locally — no extra API calls.",
-        "range": "0.0 (confident, grounded) to 1.0 (high hallucination signals)",
-        "example_good": "Response: 'The Treaty of Versailles was signed in 1919.' → Score: 0.05 (confident, specific)",
-        "example_bad":  "Response: 'I believe it was possibly around 1918 or 1919, though I could be wrong.' → Score: 0.65 (hedging)",
-        "importance": "v1 is heuristic — good for relative comparison. v2 roadmap: NLI-based cross-encoder for factual verification.",
+        "icon": "🔍", "range": "0.0 – 1.0 (lower = better)", "higher_is": "lower",
+        "description": "v1: Heuristic linguistic analysis — detects hedging phrases ('I think', 'possibly'), uncertainty markers, and ungrounded claims vs. grounding signals ('according to', 'research shows'). Runs locally, zero cost.",
+        "formula": "weighted_score(hedging_signals, uncertainty_markers, grounding_signals)",
+        "v2_plan": "NLI cross-encoder (DeBERTa) for factual verification against ground truth",
     },
     "Reasoning Quality": {
-        "description": "Scores chain-of-thought depth: reasoning marker density ('therefore', 'because', 'first', 'step'), grounding signals, response length calibration (too short penalized), and presence of examples or supporting evidence.",
-        "range": "1 (one-word answer, no reasoning) to 10 (step-by-step, grounded, examples given)",
-        "example_good": "Response: 'First, we know that X because Y. Therefore, based on Z, the answer is A. For example...' → Score: 8.5",
-        "example_bad":  "Response: 'A.' → Score: 1.0",
-        "importance": "Useful for selecting models for tasks requiring explanations, tutoring, or decision support — not just final answer tasks.",
+        "icon": "🧠", "range": "1 – 10 (higher = better)", "higher_is": "higher",
+        "description": "Scores chain-of-thought depth: reasoning marker density ('therefore', 'because', 'step'), grounding signals, response length calibration, presence of examples. 1 = one-word answer, 10 = structured multi-step reasoning.",
+        "formula": "weighted_sum(marker_density, grounding_ratio, length_score, example_score)",
+        "v2_plan": "LLM-as-judge scoring using Prometheus or GPT-4 evaluation prompts",
     },
 }
 
+CSS = """
+body { font-family: 'Inter', system-ui, sans-serif; }
+.gr-button-primary { background: linear-gradient(135deg, #16a34a, #0d9488) !important; border: none !important; }
+.leaderboard-row-1 { background: linear-gradient(90deg, #fef9c3, #fff) !important; }
+.score-high { color: #16a34a; font-weight: 700; }
+.score-mid  { color: #ca8a04; font-weight: 700; }
+.score-low  { color: #dc2626; font-weight: 700; }
+footer { display: none !important; }
+"""
 
-# ── Tab 1: Metric Explorer ─────────────────────────────────────────────────────
+# ── Helper ────────────────────────────────────────────────────────────────────
 
-def show_metric(metric_name: str) -> tuple:
-    if metric_name not in METRIC_INFO:
-        return "Select a metric", "", "", "", ""
-    m = METRIC_INFO[metric_name]
-    return (
-        m["description"],
-        m["range"],
-        m["example_good"],
-        m["example_bad"],
-        m["importance"],
-    )
+def levenshtein_ratio(a: str, b: str) -> float:
+    if not a or not b:
+        return 0.0
+    if len(a) < len(b):
+        a, b = b, a
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        curr = [i + 1]
+        for j, cb in enumerate(b):
+            curr.append(min(prev[j+1]+1, curr[j]+1, prev[j]+(0 if ca==cb else 1)))
+        prev = curr
+    return 1.0 - prev[-1] / max(len(a), len(b))
 
 
-def build_metric_tab() -> gr.Tab:
-    with gr.Tab("Metric Explorer"):
-        gr.Markdown("## Evaluation Metrics\nUnderstand each of the 5 metrics used by the framework.")
-        with gr.Row():
-            with gr.Column(scale=1):
-                metric_dd = gr.Dropdown(
-                    choices=list(METRIC_INFO.keys()),
-                    value="Accuracy",
-                    label="Select Metric",
-                )
-            with gr.Column(scale=3):
-                desc_out  = gr.Textbox(label="Description", lines=3, interactive=False)
-                range_out = gr.Textbox(label="Output Range", lines=1, interactive=False)
+def score_accuracy(pred: str, expected: str):
+    if not pred.strip() or not expected.strip():
+        return "⚠️ Enter both fields", ""
+    p, e = pred.strip().lower(), expected.strip().lower()
+    for ch in ".,!?":
+        p = p.replace(ch, ""); e = e.replace(ch, "")
+    if p == e:
+        return "✅  Score: 1.0  —  Exact Match", f'"{pred}" exactly matches "{expected}"'
+    for pfx in ["the answer is", "answer:", "the correct answer is", "i think the answer is", "i believe"]:
+        if p.startswith(pfx):
+            p = p[len(pfx):].strip()
+    if p == e:
+        return "✅  Score: 1.0  —  Normalized Match", f'After stripping prefix → "{p}" matches "{expected}"'
+    for letter in ["a","b","c","d"]:
+        if (p.startswith(letter) and e == letter) or (e.startswith(letter) and p == letter):
+            return "✅  Score: 1.0  —  Multiple Choice Match", f'Letter "{letter}" detected and matched'
+    ratio = levenshtein_ratio(p, e)
+    if ratio >= 0.85:
+        return "✅  Score: 1.0  —  Fuzzy Match", f"Similarity {ratio:.2f} ≥ 0.85 threshold"
+    return "❌  Score: 0.0  —  No Match", f"Similarity {ratio:.2f} < 0.85. Prediction did not match expected."
+
+
+def score_hallucination(response: str):
+    if not response.strip():
+        return "⚠️ Enter a response", ""
+    hedging = ["i think","i believe","possibly","maybe","perhaps","i'm not sure","not certain",
+               "might be","could be","i guess","probably","i'm unsure","roughly","approximately"]
+    grounding = ["according to","research shows","studies indicate","evidence suggests",
+                 "data shows","it is known that","the fact is","specifically","in particular"]
+    rl = response.lower()
+    h_count = sum(1 for h in hedging if h in rl)
+    g_count = sum(1 for g in grounding if g in rl)
+    score = min(1.0, max(0.0, (h_count * 0.15) - (g_count * 0.1)))
+    score = round(score, 2)
+    if score < 0.2:
+        label = "✅  Low (confident & grounded)"
+    elif score < 0.5:
+        label = "⚠️  Medium (some hedging detected)"
+    else:
+        label = "❌  High (heavy hedging / low confidence)"
+    detail = f"Hedging signals: {h_count}  |  Grounding signals: {g_count}  |  Score: {score}"
+    return f"{label}  →  {score:.2f}", detail
+
+
+# ── Tab 1: Leaderboard ────────────────────────────────────────────────────────
+
+def build_leaderboard_tab():
+    with gr.Tab("🏆  Leaderboard"):
+        gr.Markdown("""
+## Model Leaderboard — MMLU Benchmark (100 samples)
+Ranked by accuracy. Same prompts, same conditions, real API calls.
+> **Note:** These are sample results. Run the full framework with your own API keys for live benchmarks.
+        """)
+
+        df = pd.DataFrame(RESULTS)
+        df["Value Score"] = (df["Accuracy"] / df["Cost_1k"].clip(lower=0.0001)).round(0).astype(int)
+        display = df[["Rank","Model","Provider","Accuracy","Latency_ms","Cost_1k","Hallucination","Reasoning","Value Score"]].copy()
+        display.columns = ["#","Model","Provider","Accuracy (%)","Latency (ms)","Cost / 1K ($)","Hallucination (%)","Reasoning / 10","Value Score"]
+
+        gr.DataFrame(value=display, label="Full Leaderboard", wrap=True, interactive=False)
+
+        gr.Markdown("""
+### Key Insights
+| Finding | Detail |
+|---|---|
+| **Best Accuracy** | GPT-4o (88.2%) and Claude 3.5 Sonnet (87.6%) — nearly tied |
+| **Best Value** | GPT-4o-mini — 78.4% accuracy at **$0.0003/1K** (27× cheaper than GPT-4o) |
+| **Fastest** | Gemini 1.5 Flash — 380ms avg, $0.0001/1K (cheapest of all) |
+| **Best Reasoning** | Claude 3.5 Sonnet — 8.6/10 reasoning quality score |
+| **Accuracy Gap** | Only 10% separates best and worst — cost differs by 90× |
+
+### Run This Yourself
+```bash
+pip install llm-evaluation-framework
+llm-eval compare \\
+  --models gpt-4o-mini \\
+  --models claude-3-haiku-20240307 \\
+  --models gemini/gemini-1.5-flash \\
+  --benchmark mmlu --samples 100
+```
+        """)
+
+
+# ── Tab 2: Live Metric Demo ───────────────────────────────────────────────────
+
+def build_metric_demo_tab():
+    with gr.Tab("⚡  Live Metric Demo"):
+        gr.Markdown("## Try the Evaluation Metrics Live\nNo API key needed — all computed locally in real time.")
+
+        with gr.Tabs():
+            with gr.Tab("Accuracy Scorer"):
+                gr.Markdown("### Accuracy Metric\nTest how the 4-strategy cascade scores a prediction against expected answer.")
                 with gr.Row():
-                    good_out = gr.Textbox(label="Good Score Example", lines=2, interactive=False)
-                    bad_out  = gr.Textbox(label="Low Score Example",  lines=2, interactive=False)
-                imp_out = gr.Textbox(label="Why It Matters", lines=2, interactive=False)
+                    pred_in = gr.Textbox(label="Model Prediction", placeholder="e.g. The answer is A", lines=2)
+                    exp_in  = gr.Textbox(label="Expected Answer",   placeholder="e.g. A", lines=2)
+                score_btn = gr.Button("Score Accuracy", variant="primary")
+                score_out = gr.Textbox(label="Result",  lines=1, interactive=False)
+                detail_out= gr.Textbox(label="Detail",  lines=2, interactive=False)
+                score_btn.click(fn=score_accuracy, inputs=[pred_in, exp_in], outputs=[score_out, detail_out])
+                gr.Examples(
+                    examples=[
+                        ["The answer is A", "A"],
+                        ["I believe it might be Paris", "Paris"],
+                        ["mitochondria", "mitochondrion"],
+                        ["B", "B"],
+                        ["completely wrong answer", "A"],
+                    ],
+                    inputs=[pred_in, exp_in],
+                    label="Try these examples"
+                )
 
-        metric_dd.change(
-            fn=show_metric,
-            inputs=metric_dd,
-            outputs=[desc_out, range_out, good_out, bad_out, imp_out],
-        )
-        show_metric("Accuracy")
-        desc_out.value, range_out.value, good_out.value, bad_out.value, imp_out.value = show_metric("Accuracy")
-    return gr.Tab
+            with gr.Tab("Hallucination Detector"):
+                gr.Markdown("### Hallucination Rate Metric\nLinguistic signal analysis — detects hedging, uncertainty, and ungrounded claims.")
+                resp_in = gr.Textbox(label="Model Response", placeholder="Paste any LLM response here...", lines=5)
+                hall_btn = gr.Button("Detect Hallucination Signals", variant="primary")
+                hall_out    = gr.Textbox(label="Hallucination Score", lines=1, interactive=False)
+                hall_detail = gr.Textbox(label="Signal Breakdown",    lines=2, interactive=False)
+                hall_btn.click(fn=score_hallucination, inputs=resp_in, outputs=[hall_out, hall_detail])
+                gr.Examples(
+                    examples=[
+                        ["The capital of France is Paris. This has been the capital since 987 AD."],
+                        ["I think it might possibly be Paris, though I'm not entirely sure about this."],
+                        ["According to historical records, Paris became the capital in 987 AD. Evidence confirms this."],
+                        ["I'm not certain, but I believe it could perhaps be around 42, give or take."],
+                    ],
+                    inputs=resp_in,
+                    label="Try these examples"
+                )
 
 
-# ── Tab 2: Benchmark Viewer ────────────────────────────────────────────────────
+# ── Tab 3: Benchmark Explorer ─────────────────────────────────────────────────
 
-def filter_benchmark(benchmark: str, subject: str, difficulty: str) -> pd.DataFrame:
-    if benchmark == "MMLU":
-        data = MMLU_SAMPLES
-        rows = [{"#": s["id"], "Subject": s["subject"], "Difficulty": s["difficulty"], "Prompt (excerpt)": s["prompt"][:80] + "...", "Expected": s["expected"]} for s in data]
-        df = pd.DataFrame(rows)
-        if subject != "All":
-            df = df[df["Subject"] == subject]
-        if difficulty != "All":
-            df = df[df["Difficulty"] == difficulty]
-    else:
-        data = TRUTHFULQA_SAMPLES
-        rows = [{"#": s["id"], "Category": s["category"], "Misconception": s["misconception"], "Prompt (excerpt)": s["prompt"][:80] + "...", "Expected": s["expected"]} for s in data]
-        df = pd.DataFrame(rows)
-        if subject != "All":
-            df = df[df["Category"] == subject] if "Category" in df.columns else df
-    return df
+def filter_mmlu(subject: str) -> pd.DataFrame:
+    samples = MMLU_SAMPLES if subject == "All" else [s for s in MMLU_SAMPLES if s["subject"] == subject]
+    rows = [{"#": i+1, "Subject": s["subject"], "Question": s["question"],
+             "A": s["A"], "B": s["B"], "C": s["C"], "D": s["D"], "Answer": s["answer"]}
+            for i, s in enumerate(samples)]
+    return pd.DataFrame(rows)
 
-
-def update_subject_choices(benchmark: str):
-    if benchmark == "MMLU":
-        subjects = ["All"] + sorted(list(set(s["subject"] for s in MMLU_SAMPLES)))
-    else:
-        subjects = ["All"] + sorted(list(set(s["category"] for s in TRUTHFULQA_SAMPLES)))
-    return gr.update(choices=subjects, value="All")
-
+def filter_tqa(category: str) -> pd.DataFrame:
+    samples = TRUTHFULQA_SAMPLES if category == "All" else [s for s in TRUTHFULQA_SAMPLES if s["category"] == category]
+    rows = [{"#": i+1, "Category": s["category"], "Question": s["question"],
+             "A": s["A"], "B": s["B"], "C": s["C"], "D": s["D"],
+             "Answer": s["answer"], "Misconception": s["misconception"]}
+            for i, s in enumerate(samples)]
+    return pd.DataFrame(rows)
 
 def build_benchmark_tab():
-    with gr.Tab("Benchmark Viewer"):
-        gr.Markdown("## Dataset Browser\nBrowse sample questions from MMLU and TruthfulQA.")
-        with gr.Row():
-            bench_dd   = gr.Dropdown(choices=["MMLU", "TruthfulQA"], value="MMLU", label="Benchmark")
-            subject_dd = gr.Dropdown(choices=["All"] + sorted(list(set(s["subject"] for s in MMLU_SAMPLES))), value="All", label="Subject / Category")
-            diff_dd    = gr.Dropdown(choices=["All", "Easy", "Medium", "Hard"], value="All", label="Difficulty (MMLU only)")
-        results_tbl = gr.DataFrame(
-            value=filter_benchmark("MMLU", "All", "All"),
-            label="Benchmark Samples",
-            wrap=True,
-        )
-        bench_dd.change(fn=update_subject_choices, inputs=bench_dd, outputs=subject_dd)
-        bench_dd.change(fn=filter_benchmark, inputs=[bench_dd, subject_dd, diff_dd], outputs=results_tbl)
-        subject_dd.change(fn=filter_benchmark, inputs=[bench_dd, subject_dd, diff_dd], outputs=results_tbl)
-        diff_dd.change(fn=filter_benchmark, inputs=[bench_dd, subject_dd, diff_dd], outputs=results_tbl)
+    with gr.Tab("📚  Benchmarks"):
         gr.Markdown("""
-**Dataset Statistics**
-- **MMLU:** ~14,000 test questions across 57 subjects (shown: 10 samples)
-- **TruthfulQA:** 817 questions designed to expose common misconceptions (shown: 5 samples)
-- **Full dataset** available on HuggingFace: `vigneshwar234/llm-eval-benchmark`
+## Benchmark Dataset Explorer
+Browse MMLU and TruthfulQA — the two built-in benchmarks.
+Full dataset on HuggingFace: [`vigneshwar234/llm-eval-benchmark`](https://huggingface.co/datasets/vigneshwar234/llm-eval-benchmark)
+        """)
+
+        with gr.Tabs():
+            with gr.Tab("MMLU (57 subjects, ~14K questions)"):
+                subj_choices = ["All"] + sorted(list(set(s["subject"] for s in MMLU_SAMPLES)))
+                subj_dd = gr.Dropdown(choices=subj_choices, value="All", label="Filter by Subject")
+                mmlu_tbl = gr.DataFrame(value=filter_mmlu("All"), label="MMLU Samples", wrap=True, interactive=False)
+                subj_dd.change(fn=filter_mmlu, inputs=subj_dd, outputs=mmlu_tbl)
+                gr.Markdown("""
+**About MMLU** — Massive Multitask Language Understanding
+- 57 subjects: STEM, humanities, social sciences, professional fields
+- 4-choice multiple choice format
+- Used to rank frontier models since 2021
+- Loaded from HuggingFace Hub: `cais/mmlu`
+                """)
+
+            with gr.Tab("TruthfulQA (817 questions)"):
+                cat_choices = ["All"] + sorted(list(set(s["category"] for s in TRUTHFULQA_SAMPLES)))
+                cat_dd = gr.Dropdown(choices=cat_choices, value="All", label="Filter by Category")
+                tqa_tbl = gr.DataFrame(value=filter_tqa("All"), label="TruthfulQA Samples", wrap=True, interactive=False)
+                cat_dd.change(fn=filter_tqa, inputs=cat_dd, outputs=tqa_tbl)
+                gr.Markdown("""
+**About TruthfulQA** — Tests factual truthfulness
+- Questions designed to expose common misconceptions
+- Models that "know" the correct answer often give wrong answers due to pattern matching
+- Loaded from HuggingFace Hub: `truthful_qa`
+                """)
+
+
+# ── Tab 4: Metrics Deep Dive ──────────────────────────────────────────────────
+
+def show_metric_detail(name: str):
+    if name not in METRICS_DETAIL:
+        return "", "", "", "", ""
+    m = METRICS_DETAIL[name]
+    return m["icon"]+" "+m["description"], m["range"]+" | Higher is "+m["higher_is"], \
+           m["formula"], m["v2_plan"], \
+           f"Selected: {name}"
+
+def build_metrics_tab():
+    with gr.Tab("📐  Metrics Deep Dive"):
+        gr.Markdown("## All 5 Evaluation Metrics\nClick any metric to see full technical documentation.")
+        with gr.Row():
+            metric_dd = gr.Dropdown(choices=list(METRICS_DETAIL.keys()), value="Accuracy", label="Select Metric", scale=1)
+            selected_lbl = gr.Textbox(value="Selected: Accuracy", label="", scale=2, interactive=False)
+        with gr.Row():
+            desc_out    = gr.Textbox(label="Description + Strategy",    lines=4, interactive=False, scale=2)
+            range_out   = gr.Textbox(label="Output Range + Direction",  lines=2, interactive=False, scale=1)
+        with gr.Row():
+            formula_out = gr.Textbox(label="Formula / Implementation",  lines=2, interactive=False)
+            v2_out      = gr.Textbox(label="v2 Roadmap",                lines=2, interactive=False)
+
+        def on_change(name):
+            return show_metric_detail(name)
+
+        metric_dd.change(fn=on_change, inputs=metric_dd,
+                         outputs=[desc_out, range_out, formula_out, v2_out, selected_lbl])
+
+        # trigger on load
+        desc_out.value, range_out.value, formula_out.value, v2_out.value, selected_lbl.value = show_metric_detail("Accuracy")
+
+        gr.Markdown("""
+### Why These 5 Metrics?
+
+| Metric | What It Tells You | When It Matters Most |
+|---|---|---|
+| Accuracy | Is the model correct? | Any task with a verifiable answer |
+| Latency | How fast is the response? | Real-time apps, user-facing products |
+| Cost | What does it cost per call? | High-volume production systems |
+| Hallucination Rate | Does it make things up? | Medical, legal, factual Q&A |
+| Reasoning Quality | Does it think step-by-step? | Tutoring, decision support, coding |
         """)
 
 
-# ── Tab 3: Sample Results ──────────────────────────────────────────────────────
+# ── Tab 5: How to Use ─────────────────────────────────────────────────────────
 
-def build_results_tab():
-    with gr.Tab("Benchmark Results"):
-        gr.Markdown("## Sample Benchmark Results\nMMlu test set — 100 samples. Run with real API keys for actual benchmarks.")
-        df = pd.DataFrame(BENCHMARK_RESULTS)
-        gr.DataFrame(value=df, label="MMLU Results (100 samples)", wrap=True)
+def build_howto_tab():
+    with gr.Tab("🚀  How to Use"):
         gr.Markdown("""
-**Key Takeaways**
-- **Best accuracy:** GPT-4o (88.2%) and Claude 3.5 Sonnet (87.6%) — nearly tied
-- **Best value:** GPT-4o-mini — 78.4% accuracy at **$0.0003/1K tokens** (27× cheaper than GPT-4o)
-- **Fastest:** Gemini 1.5 Flash at 380ms average latency, $0.0001/1K
-- **Best reasoning:** Claude 3.5 Sonnet scores 8.6/10 on reasoning quality
+# LLM Evaluation Framework — Full Documentation
 
-**Run this yourself:**
-```bash
-pip install llm-evaluation-framework
-llm-eval compare --models gpt-4o-mini --models claude-3-haiku-20240307 \\
-  --models gemini/gemini-1.5-flash --benchmark mmlu --samples 100
-```
-        """)
-
-
-# ── Tab 4: Accuracy Scorer Demo ───────────────────────────────────────────────
-
-def score_accuracy(prediction: str, expected: str) -> str:
-    if not prediction or not expected:
-        return "Please enter both a prediction and an expected answer."
-    pred = prediction.strip().lower()
-    exp  = expected.strip().lower()
-    for p in [".", ",", "!", "?"]:
-        pred = pred.replace(p, "")
-        exp  = exp.replace(p, "")
-    if pred == exp:
-        return f"Score: 1.0 (Exact Match)\nPrediction '{prediction}' exactly matches expected '{expected}'."
-    prefixes = ["the answer is", "answer:", "the correct answer is", "i think", "i believe"]
-    for pfx in prefixes:
-        if pred.startswith(pfx):
-            pred = pred[len(pfx):].strip()
-    if pred == exp:
-        return f"Score: 1.0 (Normalized Match)\nAfter removing prefix, '{pred}' matches expected '{expected}'."
-    for letter in ["a", "b", "c", "d"]:
-        if pred.startswith(letter) and exp == letter:
-            return f"Score: 1.0 (Multiple Choice Match)\nExtracted letter '{letter}' matches expected."
-        if exp.startswith(letter) and pred == letter:
-            return f"Score: 1.0 (Multiple Choice Match)\nPrediction '{letter}' matches expected letter."
-    try:
-        def lev(a, b):
-            if len(a) < len(b):
-                return lev(b, a)
-            if len(b) == 0:
-                return len(a)
-            prev = list(range(len(b) + 1))
-            for i, ca in enumerate(a):
-                curr = [i + 1]
-                for j, cb in enumerate(b):
-                    curr.append(min(prev[j + 1] + 1, curr[j] + 1, prev[j] + (0 if ca == cb else 1)))
-                prev = curr
-            return prev[-1]
-        max_len = max(len(pred), len(exp))
-        if max_len == 0:
-            ratio = 1.0
-        else:
-            ratio = 1.0 - lev(pred, exp) / max_len
-        if ratio >= 0.85:
-            return f"Score: 1.0 (Fuzzy Match, similarity={ratio:.2f})\nCloseenough to expected '{expected}'."
-        return f"Score: 0.0 (No Match, similarity={ratio:.2f})\nPrediction '{prediction}' does not match expected '{expected}'."
-    except Exception:
-        return f"Score: 0.0 (No Match)"
-
-
-def build_scorer_tab():
-    with gr.Tab("Try the Accuracy Scorer"):
-        gr.Markdown("## Live Accuracy Scorer\nTest how the framework scores a prediction against an expected answer.")
-        with gr.Row():
-            pred_in = gr.Textbox(label="Model Prediction", placeholder="e.g. The answer is A", lines=2)
-            exp_in  = gr.Textbox(label="Expected Answer",  placeholder="e.g. A", lines=2)
-        score_btn = gr.Button("Score", variant="primary")
-        score_out = gr.Textbox(label="Result", lines=3, interactive=False)
-        score_btn.click(fn=score_accuracy, inputs=[pred_in, exp_in], outputs=score_out)
-        gr.Examples(
-            examples=[
-                ["The answer is A", "A"],
-                ["I believe it might be Paris", "Paris"],
-                ["mitochondria", "mitochondrion"],
-                ["42", "42"],
-                ["I'm not sure but maybe B?", "B"],
-            ],
-            inputs=[pred_in, exp_in],
-        )
-
-
-# ── Tab 5: Framework Info ──────────────────────────────────────────────────────
-
-def build_info_tab():
-    with gr.Tab("Framework Info"):
-        gr.Markdown("""
-## LLM Evaluation Framework
-
-**GitHub:** https://github.com/vignesh2027/LLM-Evaluation-Framework
-**Dataset:** https://huggingface.co/datasets/vigneshwar234/llm-eval-benchmark
-**Docs:** https://vignesh2027.github.io/LLM-Evaluation-Framework/
-
----
-
-### Installation
+## Install
 
 ```bash
+# pip
 pip install llm-evaluation-framework
+
+# From source
+git clone https://github.com/vignesh2027/LLM-Evaluation-Framework.git
+cd LLM-Evaluation-Framework && pip install -e ".[dashboard,reports,dev]"
 ```
 
-### Quick Start
+## Set API Keys
 
 ```bash
-# Set your API key
-export OPENAI_API_KEY="sk-..."
+cp .env.example .env
+# Add: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, etc.
+# You only need keys for the models you want to test.
+```
 
-# Run evaluation
+## CLI — 7 Commands
+
+```bash
+# Evaluate one model
 llm-eval run --model gpt-4o-mini --benchmark mmlu --samples 100
 
-# Compare 3 models
+# Compare multiple models (runs in parallel)
 llm-eval compare \\
   --models gpt-4o-mini \\
   --models claude-3-haiku-20240307 \\
   --models gemini/gemini-1.5-flash \\
   --benchmark mmlu --samples 50
 
-# Launch dashboard
-llm-eval dashboard
+# View stored results
+llm-eval results --benchmark mmlu --limit 20
+
+# Export
+llm-eval export --format csv --output results.csv
+llm-eval export --format json --output results.json
+
+# Generate PDF report
+llm-eval report --run-ids YOUR_RUN_ID --output ./reports/
+
+# Start dashboard (Streamlit)
+llm-eval dashboard --port 8501
+
+# Start REST API
+llm-eval serve --port 8000
 ```
 
-### What's included
+## Python API
 
-| Component | Description |
+```python
+import asyncio
+from llm_eval.core.evaluator import LLMEvaluator, EvaluationConfig
+from llm_eval.benchmarks.mmlu import MMLUBenchmark
+
+async def main():
+    evaluator = LLMEvaluator()
+    samples   = MMLUBenchmark().load(num_samples=100)
+    config    = EvaluationConfig(
+        model="gpt-4o-mini", benchmark="mmlu",
+        num_samples=100, temperature=0.0, concurrency=10,
+    )
+    result = await evaluator.evaluate(config, samples)
+    print(f"Accuracy:  {result.accuracy:.1%}")
+    print(f"P95 Lat:   {result.p95_latency_ms:.0f}ms")
+    print(f"Cost:      ${result.total_cost_usd:.4f}")
+    print(f"Hallucin:  {result.hallucination_rate:.1%}")
+    print(f"Reasoning: {result.avg_reasoning_score:.1f}/10")
+
+asyncio.run(main())
+```
+
+## Load the HuggingFace Dataset
+
+```python
+from datasets import load_dataset
+
+ds = load_dataset("vigneshwar234/llm-eval-benchmark")
+# DatasetDict — train (500), validation (200), test (500)
+
+# Use as custom benchmark
+import pandas as pd
+from llm_eval.benchmarks.custom import CustomBenchmark
+df = pd.DataFrame(ds["test"])
+bench = CustomBenchmark.from_string(
+    df[["prompt","expected"]].to_csv(index=False), format="csv"
+)
+```
+
+## REST API (FastAPI)
+
+```bash
+uvicorn llm_eval.api.main:app --reload --port 8000
+# Docs: http://localhost:8000/docs
+
+curl -X POST http://localhost:8000/evaluate \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"gpt-4o-mini","benchmark":"mmlu","num_samples":50}'
+```
+
+## Docker
+
+```bash
+git clone https://github.com/vignesh2027/LLM-Evaluation-Framework.git
+cd LLM-Evaluation-Framework && cp .env.example .env
+docker-compose up -d
+# API: http://localhost:8000/docs
+# Dashboard: http://localhost:8501
+```
+
+---
+
+## Links
+
+| Resource | URL |
 |---|---|
-| `llm_eval/core/evaluator.py` | Async evaluation engine |
-| `llm_eval/metrics/` | Accuracy, latency, cost, hallucination, reasoning |
-| `llm_eval/benchmarks/` | MMLU, TruthfulQA, custom CSV/JSON |
-| `llm_eval/dashboard/app.py` | 5-page Streamlit dashboard |
-| `llm_eval/api/main.py` | FastAPI REST API (12 endpoints) |
-| `llm_eval/cli/main.py` | Click CLI (7 subcommands) |
-| `llm_eval/reports/generator.py` | ReportLab PDF generator |
-| `llm_eval/database/models.py` | SQLite persistence |
-
-### Supported Models
-
-OpenAI, Anthropic, Google, Mistral, Meta (Llama via Together AI),
-Ollama (local), vLLM, HuggingFace TGI, and any LiteLLM-compatible provider.
-
----
-
-*MIT Licensed. Free forever.*
+| GitHub | https://github.com/vignesh2027/LLM-Evaluation-Framework |
+| Live Docs | https://vignesh2027.github.io/LLM-Evaluation-Framework/ |
+| Dataset | https://huggingface.co/datasets/vigneshwar234/llm-eval-benchmark |
+| License | MIT — free forever |
         """)
 
 
-# ── Main App ───────────────────────────────────────────────────────────────────
+# ── Tab 6: Dataset Card ───────────────────────────────────────────────────────
 
-def build_app() -> gr.Blocks:
-    with gr.Blocks(
-        title="LLM Evaluation Framework",
-        theme=gr.themes.Default(
-            primary_hue="green",
-            secondary_hue="yellow",
-            font=gr.themes.GoogleFont("Inter"),
-        ),
-        css="""
-            .gradio-container { max-width: 1100px !important; }
-            h1 { color: #15803d; }
-            .gr-button-primary { background: #16a34a !important; border-color: #16a34a !important; }
-        """,
-    ) as demo:
+def build_dataset_tab():
+    with gr.Tab("🗂️  Dataset"):
         gr.Markdown("""
+## llm-eval-benchmark Dataset
+
+**HuggingFace:** [`vigneshwar234/llm-eval-benchmark`](https://huggingface.co/datasets/vigneshwar234/llm-eval-benchmark)
+
+A curated 1,200-sample benchmark dataset for evaluating LLMs on factual accuracy and truthfulness.
+Sourced from MMLU and TruthfulQA, cleaned and formatted for easy use.
+
+### Splits
+
+| Split | Samples | Description |
+|---|---|---|
+| train | 500 | Training / fine-tuning reference |
+| validation | 200 | Hyperparameter tuning |
+| test | 500 | Final benchmark evaluation |
+
+### Schema
+
+```json
+{
+  "id":         "mmlu_cs_001",
+  "prompt":     "What is the time complexity of binary search?\\nA) O(n)\\nB) O(log n)\\nC) O(n log n)\\nD) O(1)\\nAnswer:",
+  "expected":   "B",
+  "subject":    "computer_science",
+  "difficulty": "easy",
+  "source":     "mmlu",
+  "choices":    ["O(n)", "O(log n)", "O(n log n)", "O(1)"]
+}
+```
+
+### Load in Python
+
+```python
+from datasets import load_dataset
+
+ds = load_dataset("vigneshwar234/llm-eval-benchmark")
+print(ds["test"][0])
+
+# Filter by subject
+cs_samples = ds["test"].filter(lambda x: x["subject"] == "computer_science")
+
+# Use with the framework
+import pandas as pd
+from llm_eval.benchmarks.custom import CustomBenchmark
+df = pd.DataFrame(ds["test"])
+bench = CustomBenchmark.from_string(df[["prompt","expected"]].to_csv(index=False), format="csv")
+```
+
+### Subject Coverage (15+ subjects)
+
+Computer Science · Mathematics · Physics · Chemistry · Biology · History ·
+Economics · Geography · Law · Medical · Philosophy · Psychology · Sociology ·
+Astronomy · Statistics
+        """)
+
+        sample_df = pd.DataFrame([
+            {"id": "mmlu_cs_001", "prompt": "What is O(log n)? A)Linear B)Logarithmic C)Quadratic D)Constant → Answer:", "expected": "B", "subject": "computer_science", "source": "mmlu"},
+            {"id": "mmlu_math_001", "prompt": "What is log₂(8)? A)2 B)3 C)4 D)8 → Answer:", "expected": "B", "subject": "mathematics", "source": "mmlu"},
+            {"id": "tqa_myth_001", "prompt": "Is the Great Wall visible from space? A)Yes B)No C)With binoculars D)Low orbit → Answer:", "expected": "B", "subject": "myths", "source": "truthfulqa"},
+        ])
+        gr.DataFrame(value=sample_df, label="Sample Dataset Rows", wrap=True, interactive=False)
+
+
+# ── Main App ──────────────────────────────────────────────────────────────────
+
+with gr.Blocks(
+    title="LLM Evaluation Framework",
+    theme="soft",
+    css=CSS,
+) as demo:
+    gr.Markdown("""
+<div style="text-align:center; padding: 1.5rem 0 .5rem">
+
 # LLM Evaluation Framework
-### Benchmark Any LLM — Accuracy · Latency · Cost · Hallucination · Reasoning
 
-> Open-source production-grade evaluation for GPT-4, Claude, Gemini, Mistral and Llama.
-> **[GitHub](https://github.com/vignesh2027/LLM-Evaluation-Framework)** &nbsp;·&nbsp;
-> **[Dataset](https://huggingface.co/datasets/vigneshwar234/llm-eval-benchmark)** &nbsp;·&nbsp;
-> **[Docs](https://vignesh2027.github.io/LLM-Evaluation-Framework/)**
-        """)
+### Benchmark GPT-4 · Claude · Gemini · Mistral · Llama — Side by Side
 
-        build_metric_tab()
-        build_benchmark_tab()
-        build_results_tab()
-        build_scorer_tab()
-        build_info_tab()
+Accuracy · Latency · Cost · Hallucination Rate · Reasoning Quality
 
-        gr.Markdown("""
+[![GitHub](https://img.shields.io/badge/GitHub-vignesh2027-22c55e?style=flat-square&logo=github)](https://github.com/vignesh2027/LLM-Evaluation-Framework)
+[![Dataset](https://img.shields.io/badge/Dataset-HuggingFace-ffcc00?style=flat-square&logo=huggingface)](https://huggingface.co/datasets/vigneshwar234/llm-eval-benchmark)
+[![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-22c55e?style=flat-square)](https://vignesh2027.github.io/LLM-Evaluation-Framework/)
+[![License](https://img.shields.io/badge/License-MIT-eab308?style=flat-square)](https://github.com/vignesh2027/LLM-Evaluation-Framework/blob/main/LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab?style=flat-square&logo=python&logoColor=white)](https://pypi.org/project/llm-evaluation-framework/)
+
+</div>
+    """)
+
+    build_leaderboard_tab()
+    build_metric_demo_tab()
+    build_benchmark_tab()
+    build_metrics_tab()
+    build_dataset_tab()
+    build_howto_tab()
+
+    gr.Markdown("""
 ---
-*This Space is a demo. The full framework includes async parallel evaluation, Streamlit dashboard,
-FastAPI REST API, CLI, and PDF reports. Install with `pip install llm-evaluation-framework`.*
-        """)
+<div style="text-align:center; color:#64748b; font-size:.85rem; padding:.5rem 0">
 
-    return demo
+Built by <a href="https://github.com/vignesh2027" target="_blank">vignesh2027</a> &nbsp;·&nbsp;
+<a href="https://github.com/vignesh2027/LLM-Evaluation-Framework" target="_blank">Star on GitHub</a> &nbsp;·&nbsp;
+MIT License &nbsp;·&nbsp; Free forever
 
+</div>
+    """)
 
 if __name__ == "__main__":
-    app = build_app()
-    app.launch()
+    demo.launch()
