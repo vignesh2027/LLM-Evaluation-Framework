@@ -441,16 +441,12 @@ class TestEvaluatorMocked(unittest.IsolatedAsyncioTestCase):
     @patch("litellm.acompletion", new_callable=AsyncMock)
     async def test_multi_sample_accuracy(self, mock_llm):
         from llm_eval.core.evaluator import EvaluationConfig, LLMEvaluator
-        resps = ["A", "B", "A", "D"]
-        exps  = ["A", "B", "C", "D"]
-        idx   = [0]
-        async def se(*a, **k):
-            r = _mock_resp(resps[idx[0]]); idx[0] += 1; return r
-        mock_llm.side_effect = se
+        # All calls return "A"; 3 samples expect "A", 1 expects "B" → always 0.75
+        mock_llm.return_value = _mock_resp("A")
         evaluator = LLMEvaluator(db_path=self.db_path)
         result = await evaluator.evaluate(
             EvaluationConfig(model="gpt-4o-mini", benchmark="test", num_samples=4, concurrency=2),
-            [{"prompt": f"Q{i}?", "expected": exps[i]} for i in range(4)]
+            [{"prompt": f"Q{i}?", "expected": ("B" if i == 2 else "A")} for i in range(4)]
         )
         self.assertAlmostEqual(result.accuracy, 0.75)
 

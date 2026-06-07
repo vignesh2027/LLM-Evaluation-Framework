@@ -82,6 +82,14 @@ class CostMetric:
                 return _PRICING[key]
         return _PRICING["default"]
 
+    def cost_per_1k_tokens(
+        self, model: str, total_cost: float, total_tokens: int
+    ) -> float:
+        """Return cost per 1,000 tokens given total cost and total token count."""
+        if total_tokens == 0:
+            return 0.0
+        return (total_cost / total_tokens) * 1000
+
     def get_all_pricing(self) -> dict[str, ModelPricing]:
         """Return the full pricing table (excludes default entry)."""
         return {k: v for k, v in _PRICING.items() if k != "default"}

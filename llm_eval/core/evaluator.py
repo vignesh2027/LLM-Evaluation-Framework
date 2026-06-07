@@ -15,9 +15,8 @@ from datetime import datetime
 from typing import Any, Optional
 
 import litellm
-from litellm import acompletion
 
-from llm_eval.database.models import Database, EvaluationRecord
+from llm_eval.database.models import Database
 from llm_eval.metrics.accuracy import AccuracyMetric
 from llm_eval.metrics.hallucination import HallucinationMetric
 from llm_eval.metrics.latency import LatencyMetric
@@ -182,7 +181,7 @@ class LLMEvaluator:
 
             try:
                 resp = await asyncio.wait_for(
-                    acompletion(
+                    litellm.acompletion(
                         model=config.model,
                         messages=[{"role": "user", "content": prompt}],
                         temperature=config.temperature,

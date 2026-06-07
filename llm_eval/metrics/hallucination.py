@@ -118,3 +118,7 @@ class HallucinationMetric:
 
         total = length_score + structure_score + grounding_score
         return round(max(1.0, min(10.0, total)), 2)
+
+    def batch_score(self, prompts: list[str], responses: list[str]) -> list[float]:
+        """Return per-sample hallucination scores for a list of prompt/response pairs."""
+        return [self.score(p, r) for p, r in zip(prompts, responses)]

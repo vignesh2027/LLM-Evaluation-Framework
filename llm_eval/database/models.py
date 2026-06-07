@@ -81,13 +81,37 @@ class Database:
             conn.executescript(_DDL)
 
     def save_result(self, result: Any) -> None:
-        """Persist an EvaluationResult to the database."""
-        meta = {}
-        if result.config:
-            meta = {
-                "temperature": result.config.temperature,
-                "max_tokens": result.config.max_tokens,
-                "tags": result.config.tags,
+        """Persist an EvaluationResult or plain dict to the database."""
+        if isinstance(result, dict):
+            d = result
+            raw_meta = d.get("metadata", {})
+            meta_json = json.dumps(raw_meta) if isinstance(raw_meta, dict) else str(raw_meta)
+            created_at = d.get("created_at", datetime.utcnow().isoformat())
+            if isinstance(created_at, datetime):
+                created_at = created_at.isoformat()
+        else:
+            cfg = getattr(result, "config", None)
+            meta_dict: dict[str, Any] = {}
+            if cfg:
+                meta_dict = {
+                    "temperature": cfg.temperature,
+                    "max_tokens": cfg.max_tokens,
+                    "tags": cfg.tags,
+                }
+            meta_json = json.dumps(meta_dict)
+            created_at = result.created_at.isoformat()
+            d = {
+                "run_id": result.run_id,
+                "model": result.model,
+                "benchmark": result.benchmark,
+                "num_samples": result.num_samples,
+                "accuracy": result.accuracy,
+                "avg_latency_ms": result.avg_latency_ms,
+                "p95_latency_ms": result.p95_latency_ms,
+                "total_cost_usd": result.total_cost_usd,
+                "cost_per_1k_tokens": result.cost_per_1k_tokens,
+                "hallucination_rate": result.hallucination_rate,
+                "avg_reasoning_score": result.avg_reasoning_score,
             }
         with self._connect() as conn:
             conn.execute(
@@ -100,19 +124,19 @@ class Database:
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
-                    result.run_id,
-                    result.model,
-                    result.benchmark,
-                    result.num_samples,
-                    result.accuracy,
-                    result.avg_latency_ms,
-                    result.p95_latency_ms,
-                    result.total_cost_usd,
-                    result.cost_per_1k_tokens,
-                    result.hallucination_rate,
-                    result.avg_reasoning_score,
-                    result.created_at.isoformat(),
-                    json.dumps(meta),
+                    d["run_id"],
+                    d["model"],
+                    d["benchmark"],
+                    d["num_samples"],
+                    d["accuracy"],
+                    d["avg_latency_ms"],
+                    d.get("p95_latency_ms", 0.0),
+                    d["total_cost_usd"],
+                    d["cost_per_1k_tokens"],
+                    d["hallucination_rate"],
+                    d["avg_reasoning_score"],
+                    created_at,
+                    meta_json,
                 ),
             )
 
@@ -121,7 +145,7 @@ class Database:
         model: Optional[str] = None,
         benchmark: Optional[str] = None,
         limit: int = 100,
-    ) -> list[EvaluationRecord]:
+    ) -> list[dict[str, Any]]:
         """Query stored results with optional filters."""
         query = "SELECT * FROM evaluations WHERE 1=1"
         params: list[Any] = []
@@ -136,14 +160,14 @@ class Database:
 
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
-        return [EvaluationRecord(**dict(row)) for row in rows]
+        return [EvaluationRecord(**dict(row)).to_dict() for row in rows]
 
-    def get_result(self, run_id: str) -> Optional[EvaluationRecord]:
+    def get_result(self, run_id: str) -> Optional[dict[str, Any]]:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM evaluations WHERE run_id = ?", (run_id,)
             ).fetchone()
-        return EvaluationRecord(**dict(row)) if row else None
+        return EvaluationRecord(**dict(row)).to_dict() if row else None
 
     def delete_result(self, run_id: str) -> bool:
         with self._connect() as conn:
@@ -178,14 +202,14 @@ class Database:
             raise ValueError("No results to export")
 
         with open(path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=records[0].to_dict().keys())
+            writer = csv.DictWriter(f, fieldnames=records[0].keys())
             writer.writeheader()
-            writer.writerows(r.to_dict() for r in records)
+            writer.writerows(records)
         return path
 
     def export_json(self, path: str) -> str:
         """Export all results to JSON and return the file path."""
         records = self.list_results(limit=10_000)
         with open(path, "w", encoding="utf-8") as f:
-            json.dump([r.to_dict() for r in records], f, indent=2)
+            json.dump(records, f, indent=2)
         return path
