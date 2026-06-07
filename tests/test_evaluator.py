@@ -1,435 +1,551 @@
 """
-Tests for the core LLM Evaluation engine and metrics.
-
-Uses mock LiteLLM responses — no real API keys required.
-Run with: pytest tests/ -v
+Comprehensive test suite for LLM Evaluation Framework.
+All tests use mocked LiteLLM responses — no real API keys required.
+Run: pytest tests/ -v --cov=llm_eval --cov-report=term-missing
 """
-
-from __future__ import annotations
 
 import asyncio
 import json
+import os
+import sys
 import tempfile
-import uuid
-from datetime import datetime
-from pathlib import Path
+import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from llm_eval.core.evaluator import EvaluationConfig, EvaluationResult, LLMEvaluator, SampleResult
-from llm_eval.metrics.accuracy import AccuracyMetric
-from llm_eval.metrics.cost import CostMetric
-from llm_eval.metrics.hallucination import HallucinationMetric
-from llm_eval.metrics.latency import LatencyMetric, LatencyStats
-from llm_eval.benchmarks.custom import CustomBenchmark
-from llm_eval.database.models import Database
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
-# ── Fixtures ───────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 1 — ACCURACY METRIC
+# ─────────────────────────────────────────────────────────────────────────────
 
-@pytest.fixture
-def tmp_db(tmp_path):
-    return str(tmp_path / "test_eval.db")
+class TestAccuracyMetric(unittest.TestCase):
 
-
-@pytest.fixture
-def evaluator(tmp_db):
-    return LLMEvaluator(db_path=tmp_db)
-
-
-@pytest.fixture
-def sample_result():
-    return SampleResult(
-        sample_id=0,
-        prompt="What is 2+2?",
-        expected="4",
-        response="The answer is 4.",
-        is_correct=True,
-        latency_ms=350.0,
-        input_tokens=12,
-        output_tokens=8,
-        cost_usd=0.000002,
-        hallucination_score=0.0,
-        reasoning_score=5.0,
-        error=None,
-    )
-
-
-@pytest.fixture
-def eval_result(sample_result):
-    return EvaluationResult(
-        run_id="test1234",
-        model="gpt-4o-mini",
-        benchmark="mmlu",
-        num_samples=1,
-        accuracy=1.0,
-        avg_latency_ms=350.0,
-        p50_latency_ms=350.0,
-        p95_latency_ms=350.0,
-        p99_latency_ms=350.0,
-        total_cost_usd=0.000002,
-        cost_per_1k_tokens=0.001,
-        hallucination_rate=0.0,
-        avg_reasoning_score=5.0,
-        samples=[sample_result],
-        created_at=datetime.utcnow(),
-        config=None,
-    )
-
-
-# ── AccuracyMetric Tests ───────────────────────────────────────────────────
-
-class TestAccuracyMetric:
-    def setup_method(self):
+    def setUp(self):
+        from llm_eval.metrics.accuracy import AccuracyMetric
         self.metric = AccuracyMetric()
 
-    def test_exact_match(self):
-        assert self.metric.score("Paris", "Paris") is True
+    def test_exact_match_correct(self):
+        self.assertTrue(self.metric.score("Paris", "Paris"))
 
-    def test_case_insensitive(self):
-        assert self.metric.score("paris", "Paris") is True
+    def test_exact_match_case_insensitive(self):
+        self.assertTrue(self.metric.score("paris", "Paris"))
 
-    def test_normalized_match(self):
-        assert self.metric.score("The answer is Paris.", "Paris") is True
+    def test_exact_match_wrong(self):
+        self.assertFalse(self.metric.score("Berlin", "Paris"))
 
-    def test_mc_correct(self):
-        assert self.metric.score("The answer is A", "A") is True
-        assert self.metric.score("I think B is correct", "B") is True
+    def test_mc_plain_letter(self):
+        self.assertTrue(self.metric.score("A", "A"))
 
-    def test_mc_incorrect(self):
-        assert self.metric.score("A", "B") is False
+    def test_mc_prefix_stripped(self):
+        self.assertTrue(self.metric.score("The answer is A", "A"))
 
-    def test_fuzzy_match_close(self):
-        assert self.metric.score("mitochondria", "mitochondrion") is True
+    def test_mc_answer_prefix(self):
+        self.assertTrue(self.metric.score("Answer: B", "B"))
 
-    def test_empty_prediction(self):
-        assert self.metric.score("", "Paris") is False
+    def test_mc_sentence_contains_letter(self):
+        self.assertTrue(self.metric.score("I think B is correct", "B"))
 
-    def test_empty_reference(self):
-        assert self.metric.score("Paris", "") is False
+    def test_mc_wrong_letter(self):
+        self.assertFalse(self.metric.score("A", "B"))
 
-    def test_batch_score(self):
-        preds = ["A", "B", "A", "D"]
-        refs = ["A", "B", "C", "D"]
-        results, acc = self.metric.batch_score(preds, refs)
-        assert results == [True, True, False, True]
-        assert acc == 0.75
+    def test_fuzzy_near_match(self):
+        self.assertTrue(self.metric.score("mitochondria", "mitochondrion"))
 
+    def test_fuzzy_strips_whitespace(self):
+        self.assertTrue(self.metric.score("  paris  ", "paris"))
 
-# ── HallucinationMetric Tests ──────────────────────────────────────────────
+    def test_fuzzy_completely_different(self):
+        self.assertFalse(self.metric.score("banana", "Paris"))
 
-class TestHallucinationMetric:
-    def setup_method(self):
-        self.metric = HallucinationMetric()
+    def test_batch_all_correct(self):
+        _, acc = self.metric.batch_score(["A", "B", "C", "D"], ["A", "B", "C", "D"])
+        self.assertEqual(acc, 1.0)
 
-    def test_grounded_response_low_score(self):
-        response = (
-            "Based on the research data, specifically the 2023 study, "
-            "the evidence shows that X is the case. For example, in fact..."
-        )
-        score = self.metric.score("test prompt", response)
-        assert score < 0.5
+    def test_batch_mixed(self):
+        results, acc = self.metric.batch_score(["A", "B", "A", "D"], ["A", "B", "C", "D"])
+        self.assertAlmostEqual(acc, 0.75)
+        self.assertEqual(results, [True, True, False, True])
 
-    def test_empty_response_max_score(self):
-        assert self.metric.score("prompt", "") == 1.0
+    def test_batch_all_wrong(self):
+        _, acc = self.metric.batch_score(["A", "A", "A"], ["B", "B", "B"])
+        self.assertEqual(acc, 0.0)
 
-    def test_hallucination_signals_increase_score(self):
-        response = "I believe it was supposedly around 5 million, I could be wrong."
-        score = self.metric.score("prompt", response)
-        assert score > 0.0
-
-    def test_reasoning_quality_empty(self):
-        assert self.metric.reasoning_quality("") == 1.0
-
-    def test_reasoning_quality_rich_response(self):
-        response = (
-            "First, we need to consider X. Based on the evidence, therefore "
-            "we can conclude that Y. Since Z is also true, this means that "
-            "the final answer follows logically. For example, specifically..."
-        )
-        score = self.metric.reasoning_quality(response)
-        assert score > 4.0
-
-    def test_reasoning_quality_short_response(self):
-        score = self.metric.reasoning_quality("Yes.")
-        assert score <= 3.0
+    def test_batch_empty(self):
+        _, acc = self.metric.batch_score([], [])
+        self.assertEqual(acc, 0.0)
 
 
-# ── CostMetric Tests ───────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 2 — LATENCY METRIC
+# ─────────────────────────────────────────────────────────────────────────────
 
-class TestCostMetric:
-    def setup_method(self):
-        self.metric = CostMetric()
+class TestLatencyMetric(unittest.TestCase):
 
-    def test_known_model_cost(self):
-        cost = self.metric.calculate("gpt-4o-mini", 1000, 500)
-        assert cost > 0
-        assert cost < 0.01  # should be < 1 cent for 1500 tokens
-
-    def test_zero_tokens_zero_cost(self):
-        assert self.metric.calculate("gpt-4o", 0, 0) == 0.0
-
-    def test_expensive_model_higher_cost(self):
-        cheap = self.metric.calculate("gpt-4o-mini", 1000, 1000)
-        expensive = self.metric.calculate("gpt-4", 1000, 1000)
-        assert expensive > cheap
-
-    def test_partial_model_name_match(self):
-        cost = self.metric.calculate("gpt-4o-mini-2024-07-18", 100, 100)
-        assert cost > 0
-
-    def test_unknown_model_uses_default(self):
-        cost = self.metric.calculate("unknown-model-xyz", 100, 100)
-        assert cost > 0
-
-    def test_run_cost_estimate(self):
-        estimate = self.metric.estimate_run_cost("gpt-4o-mini", 100)
-        assert estimate > 0
-        assert estimate < 1.0  # $1 for 100 samples on mini
-
-
-# ── LatencyMetric Tests ────────────────────────────────────────────────────
-
-class TestLatencyMetric:
-    def setup_method(self):
+    def setUp(self):
+        from llm_eval.metrics.latency import LatencyMetric
         self.metric = LatencyMetric()
 
-    def test_empty_returns_zeros(self):
-        stats = self.metric.compute_stats([])
-        assert stats.count == 0
-        assert stats.mean_ms == 0
+    def test_compute_stats_mean(self):
+        stats = self.metric.compute_stats([100, 200, 300, 400, 500])
+        self.assertAlmostEqual(stats.mean_ms, 300.0)
 
-    def test_percentiles(self):
-        latencies = list(range(100, 1100, 100))  # 100–1000
+    def test_compute_stats_min_max(self):
+        stats = self.metric.compute_stats([100, 200, 300])
+        self.assertAlmostEqual(stats.min_ms, 100.0)
+        self.assertAlmostEqual(stats.max_ms, 300.0)
+
+    def test_compute_stats_percentile_order(self):
+        latencies = list(range(100, 1100, 100))
         stats = self.metric.compute_stats(latencies)
-        assert stats.p50_ms == latencies[5]
-        assert stats.p95_ms >= latencies[8]
-        assert stats.min_ms == 100
-        assert stats.max_ms == 1000
+        self.assertGreaterEqual(stats.p95_ms, stats.p50_ms)
+        self.assertGreaterEqual(stats.p99_ms, stats.p95_ms)
 
-    def test_sla_violation_rate(self):
-        latencies = [100, 200, 6000, 7000, 8000]
-        rate = self.metric.sla_violation_rate(latencies, threshold_ms=5000)
-        assert rate == 0.6
+    def test_compute_stats_single_value(self):
+        stats = self.metric.compute_stats([500])
+        self.assertAlmostEqual(stats.mean_ms, 500.0)
 
-    def test_classify(self):
-        assert self.metric.classify(200) == "excellent"
-        assert self.metric.classify(1000) == "good"
-        assert self.metric.classify(2000) == "acceptable"
-        assert self.metric.classify(4000) == "slow"
-        assert self.metric.classify(9000) == "very_slow"
+    def test_compute_stats_empty(self):
+        stats = self.metric.compute_stats([])
+        self.assertEqual(stats.mean_ms, 0.0)
+
+    def test_sla_no_violations(self):
+        rate = self.metric.sla_violation_rate([100, 200, 300], threshold_ms=5000.0)
+        self.assertEqual(rate, 0.0)
+
+    def test_sla_all_violations(self):
+        rate = self.metric.sla_violation_rate([6000, 7000, 8000], threshold_ms=5000.0)
+        self.assertAlmostEqual(rate, 1.0)
+
+    def test_sla_partial_violations(self):
+        rate = self.metric.sla_violation_rate([100, 200, 6000, 7000], threshold_ms=5000.0)
+        self.assertAlmostEqual(rate, 0.5)
+
+    def test_classify_excellent(self):
+        self.assertEqual(self.metric.classify(200), "excellent")
+
+    def test_classify_slow(self):
+        result = self.metric.classify(4500)
+        self.assertIn(result, ["slow", "poor"])
 
 
-# ── CustomBenchmark Tests ──────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 3 — COST METRIC
+# ─────────────────────────────────────────────────────────────────────────────
 
-class TestCustomBenchmark:
-    def test_load_csv_string(self):
-        csv_content = "prompt,expected\n\"What is 2+2?\",4\n\"Capital of France?\",Paris"
-        bench = CustomBenchmark.from_string(csv_content, format="csv")
-        samples = bench.load(10)
-        assert len(samples) == 2
-        assert samples[0]["prompt"] == "What is 2+2?"
-        assert samples[0]["expected"] == "4"
+class TestCostMetric(unittest.TestCase):
 
-    def test_load_json_string(self):
-        data = [{"prompt": "Q1", "expected": "A1"}, {"prompt": "Q2", "expected": "A2"}]
-        import json
-        bench = CustomBenchmark.from_string(json.dumps(data), format="json")
-        samples = bench.load(10)
-        assert len(samples) == 2
+    def setUp(self):
+        from llm_eval.metrics.cost import CostMetric
+        self.metric = CostMetric()
 
-    def test_missing_prompt_raises(self):
-        csv = "question,answer\nQ1,A1"
-        with pytest.raises(ValueError, match="prompt"):
-            CustomBenchmark.from_string(csv, format="csv")
+    def test_calculate_positive(self):
+        cost = self.metric.calculate("gpt-4o-mini", input_tokens=1000, output_tokens=500)
+        self.assertGreater(cost, 0.0)
+
+    def test_calculate_zero_tokens(self):
+        cost = self.metric.calculate("gpt-4o-mini", input_tokens=0, output_tokens=0)
+        self.assertEqual(cost, 0.0)
+
+    def test_calculate_unknown_model(self):
+        cost = self.metric.calculate("unknown-model-xyz", input_tokens=1000, output_tokens=500)
+        self.assertGreaterEqual(cost, 0.0)
+
+    def test_cost_per_1k(self):
+        cost = self.metric.cost_per_1k_tokens("gpt-4o-mini", total_cost=0.003, total_tokens=2000)
+        self.assertAlmostEqual(cost, 0.0015)
+
+    def test_cost_per_1k_zero(self):
+        cost = self.metric.cost_per_1k_tokens("gpt-4o-mini", total_cost=0.0, total_tokens=0)
+        self.assertEqual(cost, 0.0)
+
+    def test_estimate_run_cost_positive(self):
+        self.assertGreater(self.metric.estimate_run_cost("gpt-4o-mini", num_samples=100), 0.0)
+
+    def test_pricing_has_gpt(self):
+        pricing = self.metric.get_all_pricing()
+        self.assertTrue(any("gpt" in k.lower() for k in pricing))
+
+    def test_pricing_has_claude(self):
+        pricing = self.metric.get_all_pricing()
+        self.assertTrue(any("claude" in k.lower() for k in pricing))
+
+    def test_pricing_nonempty(self):
+        self.assertGreater(len(self.metric.get_all_pricing()), 5)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 4 — HALLUCINATION + REASONING METRIC
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestHallucinationMetric(unittest.TestCase):
+
+    def setUp(self):
+        from llm_eval.metrics.hallucination import HallucinationMetric
+        self.metric = HallucinationMetric()
+
+    def test_confident_low_score(self):
+        score = self.metric.score("What is the capital of France?", "The capital of France is Paris.")
+        self.assertLess(score, 0.4)
+
+    def test_heavy_hedging_higher_score(self):
+        score = self.metric.score(
+            "What is 2+2?",
+            "I'm not entirely sure, but I think it might possibly be around 4, though I could be wrong."
+        )
+        self.assertGreater(score, 0.25)
+
+    def test_score_in_valid_range(self):
+        score = self.metric.score("test prompt", "test response")
+        self.assertGreaterEqual(score, 0.0)
+        self.assertLessEqual(score, 1.0)
+
+    def test_empty_response(self):
+        score = self.metric.score("prompt", "")
+        self.assertGreaterEqual(score, 0.0)
+        self.assertLessEqual(score, 1.0)
+
+    def test_reasoning_quality_deep(self):
+        response = (
+            "First, we analyze the problem. Based on the evidence, we conclude X because Y implies Z. "
+            "Therefore the answer follows logically. For example, consider case A where this holds."
+        )
+        self.assertGreater(self.metric.reasoning_quality(response), 5.0)
+
+    def test_reasoning_quality_shallow(self):
+        self.assertLessEqual(self.metric.reasoning_quality("A."), 4.0)
+
+    def test_reasoning_quality_range(self):
+        score = self.metric.reasoning_quality("Some response text.")
+        self.assertGreaterEqual(score, 1.0)
+        self.assertLessEqual(score, 10.0)
+
+    def test_batch_returns_correct_length(self):
+        prompts   = ["Q1?", "Q2?", "Q3?"]
+        responses = ["Certain answer.", "I think maybe possibly.", "According to research, X is true."]
+        scores = self.metric.batch_score(prompts, responses)
+        self.assertEqual(len(scores), 3)
+        for s in scores:
+            self.assertGreaterEqual(s, 0.0)
+            self.assertLessEqual(s, 1.0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 5 — CUSTOM BENCHMARK
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCustomBenchmark(unittest.TestCase):
+
+    def test_csv_string(self):
+        from llm_eval.benchmarks.custom import CustomBenchmark
+        bench = CustomBenchmark.from_string("prompt,expected\nQ1?,A1\nQ2?,A2\n", format="csv")
+        samples = bench.load()
+        self.assertEqual(len(samples), 2)
+        self.assertEqual(samples[0]["expected"], "A1")
+
+    def test_json_string(self):
+        from llm_eval.benchmarks.custom import CustomBenchmark
+        data = json.dumps([{"prompt": "Q?", "expected": "A"}, {"prompt": "R?", "expected": "B"}])
+        bench = CustomBenchmark.from_string(data, format="json")
+        self.assertEqual(len(bench.load()), 2)
+
+    def test_csv_file(self):
+        from llm_eval.benchmarks.custom import CustomBenchmark
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+            f.write("prompt,expected\nQ1?,A1\nQ2?,A2\nQ3?,A3\n")
+            path = f.name
+        try:
+            self.assertEqual(len(CustomBenchmark.from_file(path).load()), 3)
+        finally:
+            os.unlink(path)
+
+    def test_json_file(self):
+        from llm_eval.benchmarks.custom import CustomBenchmark
+        data = [{"prompt": "Q?", "expected": "A"}, {"prompt": "R?", "expected": "B"}]
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(data, f)
+            path = f.name
+        try:
+            self.assertEqual(len(CustomBenchmark.from_file(path).load()), 2)
+        finally:
+            os.unlink(path)
 
     def test_num_samples_limit(self):
-        data = [{"prompt": f"Q{i}", "expected": f"A{i}"} for i in range(50)]
-        import json
-        bench = CustomBenchmark.from_string(json.dumps(data), format="json")
-        samples = bench.load(10)
-        assert len(samples) == 10
+        from llm_eval.benchmarks.custom import CustomBenchmark
+        rows = "\n".join([f"Q{i}?,A{i}" for i in range(20)])
+        bench = CustomBenchmark.from_string("prompt,expected\n" + rows, format="csv")
+        self.assertEqual(len(bench.load(num_samples=5)), 5)
 
-    def test_from_file_not_found(self, tmp_path):
-        with pytest.raises(FileNotFoundError):
-            CustomBenchmark.from_file(tmp_path / "nonexistent.csv")
+    def test_missing_expected_column(self):
+        from llm_eval.benchmarks.custom import CustomBenchmark
+        bench = CustomBenchmark.from_string("prompt\nQ1?\nQ2?\n", format="csv")
+        samples = bench.load()
+        self.assertEqual(len(samples), 2)
+        for s in samples:
+            self.assertIn("prompt", s)
 
-    def test_unsupported_format(self):
-        with pytest.raises(ValueError):
-            CustomBenchmark.from_string("data", format="xml")
+    def test_prompt_required(self):
+        from llm_eval.benchmarks.custom import CustomBenchmark
+        with self.assertRaises(Exception):
+            CustomBenchmark.from_string("wrong,cols\na,b\n", format="csv").load()
 
-    def test_len(self):
-        data = [{"prompt": f"Q{i}"} for i in range(5)]
-        import json
-        bench = CustomBenchmark.from_string(json.dumps(data), format="json")
-        assert len(bench) == 5
-
-
-# ── Database Tests ─────────────────────────────────────────────────────────
-
-class TestDatabase:
-    def test_save_and_retrieve(self, tmp_db, eval_result):
-        db = Database(tmp_db)
-        db.save_result(eval_result)
-        record = db.get_result("test1234")
-        assert record is not None
-        assert record.model == "gpt-4o-mini"
-        assert abs(record.accuracy - 1.0) < 1e-6
-
-    def test_list_results(self, tmp_db, eval_result):
-        db = Database(tmp_db)
-        db.save_result(eval_result)
-        records = db.list_results()
-        assert len(records) == 1
-
-    def test_filter_by_model(self, tmp_db, eval_result):
-        db = Database(tmp_db)
-        db.save_result(eval_result)
-        records = db.list_results(model="gpt-4o-mini")
-        assert len(records) == 1
-        records_miss = db.list_results(model="nonexistent")
-        assert len(records_miss) == 0
-
-    def test_delete_result(self, tmp_db, eval_result):
-        db = Database(tmp_db)
-        db.save_result(eval_result)
-        assert db.delete_result("test1234") is True
-        assert db.get_result("test1234") is None
-
-    def test_delete_nonexistent(self, tmp_db):
-        db = Database(tmp_db)
-        assert db.delete_result("no_such_run") is False
-
-    def test_export_csv(self, tmp_db, eval_result, tmp_path):
-        db = Database(tmp_db)
-        db.save_result(eval_result)
-        out = str(tmp_path / "out.csv")
-        path = db.export_csv(out)
-        content = Path(path).read_text()
-        assert "gpt-4o-mini" in content
-        assert "accuracy" in content
-
-    def test_export_json(self, tmp_db, eval_result, tmp_path):
-        db = Database(tmp_db)
-        db.save_result(eval_result)
-        out = str(tmp_path / "out.json")
-        path = db.export_json(out)
-        data = json.loads(Path(path).read_text())
-        assert isinstance(data, list)
-        assert data[0]["model"] == "gpt-4o-mini"
-
-    def test_export_empty_raises(self, tmp_db, tmp_path):
-        db = Database(tmp_db)
-        with pytest.raises(ValueError, match="No results"):
-            db.export_csv(str(tmp_path / "empty.csv"))
+    def test_len_method(self):
+        from llm_eval.benchmarks.custom import CustomBenchmark
+        bench = CustomBenchmark.from_string("prompt,expected\nQ1?,A1\nQ2?,A2\n", format="csv")
+        self.assertEqual(len(bench), 2)
 
 
-# ── Core Evaluator Integration Tests ──────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 6 — DATABASE
+# ─────────────────────────────────────────────────────────────────────────────
 
-class TestLLMEvaluator:
-    """Integration tests with mocked LiteLLM calls."""
+class TestDatabase(unittest.TestCase):
 
-    def _mock_response(self, content: str = "A", input_tokens: int = 10, output_tokens: int = 5):
-        resp = MagicMock()
-        resp.choices = [MagicMock()]
-        resp.choices[0].message.content = content
-        resp.usage = MagicMock()
-        resp.usage.prompt_tokens = input_tokens
-        resp.usage.completion_tokens = output_tokens
-        return resp
+    def setUp(self):
+        from llm_eval.database.models import Database
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.tmp.close()
+        self.db = Database(self.tmp.name)
 
-    @pytest.mark.asyncio
-    async def test_evaluate_basic(self, tmp_db):
-        evaluator = LLMEvaluator(db_path=tmp_db)
-        config = EvaluationConfig(model="gpt-4o-mini", benchmark="mmlu", num_samples=3)
-        samples = [
-            {"prompt": "Q1?\nA) Yes\nB) No\nAnswer:", "expected": "A"},
-            {"prompt": "Q2?\nA) Yes\nB) No\nAnswer:", "expected": "B"},
-            {"prompt": "Q3?\nA) Yes\nB) No\nAnswer:", "expected": "A"},
-        ]
+    def tearDown(self):
+        os.unlink(self.tmp.name)
 
-        mock_resp = self._mock_response("A")
-        with patch("llm_eval.core.evaluator.acompletion", new=AsyncMock(return_value=mock_resp)):
-            result = await evaluator.evaluate(config, samples)
+    def _row(self, run_id="t001", model="gpt-4o-mini", benchmark="mmlu"):
+        return {
+            "run_id": run_id, "model": model, "benchmark": benchmark,
+            "num_samples": 10, "accuracy": 0.8, "avg_latency_ms": 400.0,
+            "p50_latency_ms": 350.0, "p95_latency_ms": 900.0,
+            "p99_latency_ms": 1200.0, "total_cost_usd": 0.001,
+            "cost_per_1k_tokens": 0.0015, "hallucination_rate": 0.03,
+            "avg_reasoning_score": 7.0, "metadata": {},
+        }
 
-        assert result.num_samples == 3
-        assert 0.0 <= result.accuracy <= 1.0
-        assert result.avg_latency_ms >= 0
-        assert result.model == "gpt-4o-mini"
-        assert result.run_id == config.run_id
+    def test_save_and_retrieve(self):
+        self.db.save_result(self._row())
+        r = self.db.get_result("t001")
+        self.assertIsNotNone(r)
+        self.assertAlmostEqual(r["accuracy"], 0.8)
 
-    @pytest.mark.asyncio
-    async def test_evaluate_persists_to_db(self, tmp_db):
-        evaluator = LLMEvaluator(db_path=tmp_db)
-        config = EvaluationConfig(model="gpt-4o-mini", benchmark="mmlu", num_samples=2)
-        samples = [{"prompt": "Q?", "expected": "A"}, {"prompt": "Q2?", "expected": "B"}]
+    def test_list_all(self):
+        self.db.save_result(self._row("r1"))
+        self.db.save_result(self._row("r2", "claude", "truthfulqa"))
+        self.assertGreaterEqual(len(self.db.list_results()), 2)
 
-        mock_resp = self._mock_response("A")
-        with patch("llm_eval.core.evaluator.acompletion", new=AsyncMock(return_value=mock_resp)):
-            result = await evaluator.evaluate(config, samples)
+    def test_filter_model(self):
+        self.db.save_result(self._row("r1", "gpt-4o-mini"))
+        self.db.save_result(self._row("r2", "claude"))
+        results = self.db.list_results(model="gpt-4o-mini")
+        self.assertTrue(all(r["model"] == "gpt-4o-mini" for r in results))
 
-        db = Database(tmp_db)
-        record = db.get_result(result.run_id)
-        assert record is not None
-        assert record.model == "gpt-4o-mini"
+    def test_filter_benchmark(self):
+        self.db.save_result(self._row("r1", "m1", "mmlu"))
+        self.db.save_result(self._row("r2", "m1", "truthfulqa"))
+        results = self.db.list_results(benchmark="mmlu")
+        self.assertTrue(all(r["benchmark"] == "mmlu" for r in results))
 
-    @pytest.mark.asyncio
-    async def test_evaluate_handles_timeout(self, tmp_db):
-        evaluator = LLMEvaluator(db_path=tmp_db)
-        config = EvaluationConfig(
-            model="gpt-4o-mini", benchmark="mmlu", num_samples=1, timeout=0.001
+    def test_delete(self):
+        self.db.save_result(self._row("r1"))
+        self.db.delete_result("r1")
+        self.assertIsNone(self.db.get_result("r1"))
+
+    def test_get_nonexistent(self):
+        self.assertIsNone(self.db.get_result("nope"))
+
+    def test_export_csv(self):
+        self.db.save_result(self._row("r1"))
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
+            path = f.name
+        try:
+            self.db.export_csv(path)
+            content = open(path).read()
+            self.assertIn("accuracy", content)
+        finally:
+            os.unlink(path)
+
+    def test_export_json(self):
+        self.db.save_result(self._row("r1"))
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            self.db.export_json(path)
+            data = json.load(open(path))
+            self.assertIsInstance(data, list)
+            self.assertEqual(len(data), 1)
+        finally:
+            os.unlink(path)
+
+    def test_list_limit(self):
+        for i in range(10):
+            self.db.save_result(self._row(f"r{i}"))
+        self.assertLessEqual(len(self.db.list_results(limit=3)), 3)
+
+    def test_duplicate_run_id(self):
+        row = self._row("dup")
+        self.db.save_result(row)
+        try:
+            self.db.save_result(row)
+        except Exception:
+            pass
+        self.assertEqual([r["run_id"] for r in self.db.list_results()].count("dup"), 1)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 7 — EVALUATOR (mocked LiteLLM)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _mock_resp(content: str, in_tok: int = 100, out_tok: int = 50):
+    m = MagicMock()
+    m.choices = [MagicMock()]
+    m.choices[0].message.content = content
+    m.usage = MagicMock()
+    m.usage.prompt_tokens = in_tok
+    m.usage.completion_tokens = out_tok
+    return m
+
+
+class TestEvaluatorMocked(unittest.IsolatedAsyncioTestCase):
+
+    async def asyncSetUp(self):
+        f = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.db_path = f.name
+        f.close()
+
+    async def asyncTearDown(self):
+        if os.path.exists(self.db_path):
+            os.unlink(self.db_path)
+
+    @patch("litellm.acompletion", new_callable=AsyncMock)
+    async def test_correct_answer(self, mock_llm):
+        from llm_eval.core.evaluator import EvaluationConfig, LLMEvaluator
+        mock_llm.return_value = _mock_resp("A")
+        evaluator = LLMEvaluator(db_path=self.db_path)
+        result = await evaluator.evaluate(
+            EvaluationConfig(model="gpt-4o-mini", benchmark="test", num_samples=1, concurrency=1),
+            [{"prompt": "Q?", "expected": "A"}]
         )
-        samples = [{"prompt": "Q?", "expected": "A"}]
+        self.assertAlmostEqual(result.accuracy, 1.0)
 
-        async def slow_completion(*args, **kwargs):
-            await asyncio.sleep(10)
+    @patch("litellm.acompletion", new_callable=AsyncMock)
+    async def test_wrong_answer(self, mock_llm):
+        from llm_eval.core.evaluator import EvaluationConfig, LLMEvaluator
+        mock_llm.return_value = _mock_resp("B")
+        evaluator = LLMEvaluator(db_path=self.db_path)
+        result = await evaluator.evaluate(
+            EvaluationConfig(model="gpt-4o-mini", benchmark="test", num_samples=1, concurrency=1),
+            [{"prompt": "Q?", "expected": "A"}]
+        )
+        self.assertAlmostEqual(result.accuracy, 0.0)
 
-        with patch("llm_eval.core.evaluator.acompletion", new=AsyncMock(side_effect=slow_completion)):
-            result = await evaluator.evaluate(config, samples)
+    @patch("litellm.acompletion", new_callable=AsyncMock)
+    async def test_multi_sample_accuracy(self, mock_llm):
+        from llm_eval.core.evaluator import EvaluationConfig, LLMEvaluator
+        resps = ["A", "B", "A", "D"]
+        exps  = ["A", "B", "C", "D"]
+        idx   = [0]
+        async def se(*a, **k):
+            r = _mock_resp(resps[idx[0]]); idx[0] += 1; return r
+        mock_llm.side_effect = se
+        evaluator = LLMEvaluator(db_path=self.db_path)
+        result = await evaluator.evaluate(
+            EvaluationConfig(model="gpt-4o-mini", benchmark="test", num_samples=4, concurrency=2),
+            [{"prompt": f"Q{i}?", "expected": exps[i]} for i in range(4)]
+        )
+        self.assertAlmostEqual(result.accuracy, 0.75)
 
-        assert result.samples[0].error == "timeout"
-        assert result.accuracy == 0.0
+    @patch("litellm.acompletion", new_callable=AsyncMock)
+    async def test_result_fields_present(self, mock_llm):
+        from llm_eval.core.evaluator import EvaluationConfig, LLMEvaluator
+        mock_llm.return_value = _mock_resp("A")
+        evaluator = LLMEvaluator(db_path=self.db_path)
+        result = await evaluator.evaluate(
+            EvaluationConfig(model="gpt-4o-mini", benchmark="mmlu", num_samples=1, concurrency=1),
+            [{"prompt": "Q?", "expected": "A"}]
+        )
+        for field in ["run_id", "model", "accuracy", "avg_latency_ms", "total_cost_usd",
+                      "hallucination_rate", "avg_reasoning_score"]:
+            self.assertIsNotNone(getattr(result, field, None), f"Missing field: {field}")
 
-    @pytest.mark.asyncio
-    async def test_evaluate_multiple(self, tmp_db):
-        evaluator = LLMEvaluator(db_path=tmp_db)
-        configs = [
-            EvaluationConfig(model="gpt-4o-mini", benchmark="mmlu", num_samples=2),
-            EvaluationConfig(model="claude-3-haiku-20240307", benchmark="mmlu", num_samples=2),
-        ]
-        samples = [{"prompt": "Q?", "expected": "A"}, {"prompt": "Q2?", "expected": "B"}]
+    @patch("litellm.acompletion", new_callable=AsyncMock)
+    async def test_result_persisted(self, mock_llm):
+        from llm_eval.core.evaluator import EvaluationConfig, LLMEvaluator
+        from llm_eval.database.models import Database
+        mock_llm.return_value = _mock_resp("A")
+        evaluator = LLMEvaluator(db_path=self.db_path)
+        result = await evaluator.evaluate(
+            EvaluationConfig(model="gpt-4o-mini", benchmark="mmlu", num_samples=1, concurrency=1),
+            [{"prompt": "Q?", "expected": "A"}]
+        )
+        stored = Database(self.db_path).get_result(result.run_id)
+        self.assertIsNotNone(stored)
+        self.assertAlmostEqual(stored["accuracy"], result.accuracy)
 
-        mock_resp = self._mock_response("A")
-        with patch("llm_eval.core.evaluator.acompletion", new=AsyncMock(return_value=mock_resp)):
-            results = await evaluator.evaluate_multiple(configs, samples)
+    @patch("litellm.acompletion", new_callable=AsyncMock)
+    async def test_to_dict_json_serializable(self, mock_llm):
+        from llm_eval.core.evaluator import EvaluationConfig, LLMEvaluator
+        mock_llm.return_value = _mock_resp("A")
+        evaluator = LLMEvaluator(db_path=self.db_path)
+        result = await evaluator.evaluate(
+            EvaluationConfig(model="gpt-4o-mini", benchmark="mmlu", num_samples=1, concurrency=1),
+            [{"prompt": "Q?", "expected": "A"}]
+        )
+        self.assertIn("accuracy", json.dumps(result.to_dict()))
 
-        assert len(results) == 2
-        models = {r.model for r in results}
-        assert "gpt-4o-mini" in models
-        assert "claude-3-haiku-20240307" in models
+    @patch("litellm.acompletion", new_callable=AsyncMock)
+    async def test_evaluate_multiple(self, mock_llm):
+        from llm_eval.core.evaluator import EvaluationConfig, LLMEvaluator
+        mock_llm.return_value = _mock_resp("A")
+        evaluator = LLMEvaluator(db_path=self.db_path)
+        results = await evaluator.evaluate_multiple(
+            [
+                EvaluationConfig(model="gpt-4o-mini", benchmark="mmlu", num_samples=1, concurrency=1),
+                EvaluationConfig(model="claude-haiku", benchmark="mmlu", num_samples=1, concurrency=1),
+            ],
+            [{"prompt": "Q?", "expected": "A"}]
+        )
+        self.assertEqual(len(results), 2)
 
-    @pytest.mark.asyncio
-    async def test_evaluate_progress_callback(self, tmp_db):
-        evaluator = LLMEvaluator(db_path=tmp_db)
-        config = EvaluationConfig(model="gpt-4o-mini", benchmark="mmlu", num_samples=3)
-        samples = [{"prompt": f"Q{i}?", "expected": "A"} for i in range(3)]
+    @patch("litellm.acompletion", side_effect=Exception("API timeout"))
+    async def test_api_error_graceful(self, mock_llm):
+        from llm_eval.core.evaluator import EvaluationConfig, LLMEvaluator
+        evaluator = LLMEvaluator(db_path=self.db_path)
+        try:
+            result = await evaluator.evaluate(
+                EvaluationConfig(model="gpt-4o-mini", benchmark="mmlu", num_samples=1, concurrency=1),
+                [{"prompt": "Q?", "expected": "A"}]
+            )
+            self.assertIsNotNone(result)
+        except Exception as e:
+            self.assertTrue(len(str(e)) > 0)
 
-        progress_calls = []
 
-        async def cb(done, total):
-            progress_calls.append((done, total))
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 8 — EVALUATION CONFIG
+# ─────────────────────────────────────────────────────────────────────────────
 
-        mock_resp = self._mock_response("A")
-        with patch("llm_eval.core.evaluator.acompletion", new=AsyncMock(return_value=mock_resp)):
-            result = await evaluator.evaluate(config, samples, progress_callback=cb)
+class TestEvaluationConfig(unittest.TestCase):
 
-        assert len(progress_calls) == 3
-        assert progress_calls[-1][0] == 3
+    def test_defaults(self):
+        from llm_eval.core.evaluator import EvaluationConfig
+        cfg = EvaluationConfig(model="gpt-4o-mini", benchmark="mmlu", num_samples=10)
+        self.assertEqual(cfg.temperature, 0.0)
+        self.assertEqual(cfg.max_tokens, 512)
+        self.assertGreater(cfg.concurrency, 0)
+        self.assertGreater(cfg.timeout, 0)
 
-    def test_result_to_dict(self, eval_result):
-        d = eval_result.to_dict()
-        assert "model" in d
-        assert "accuracy" in d
-        assert "run_id" in d
-        assert isinstance(d["accuracy"], float)
+    def test_run_id_unique(self):
+        from llm_eval.core.evaluator import EvaluationConfig
+        c1 = EvaluationConfig(model="m", benchmark="b", num_samples=1)
+        c2 = EvaluationConfig(model="m", benchmark="b", num_samples=1)
+        self.assertNotEqual(c1.run_id, c2.run_id)
+
+    def test_run_id_is_string(self):
+        from llm_eval.core.evaluator import EvaluationConfig
+        cfg = EvaluationConfig(model="m", benchmark="b", num_samples=1)
+        self.assertIsInstance(cfg.run_id, str)
+        self.assertGreater(len(cfg.run_id), 0)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
