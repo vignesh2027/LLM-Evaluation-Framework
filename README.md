@@ -9,15 +9,6 @@
   Measure accuracy, latency, cost, hallucination, and reasoning quality across any LLM — side by side.
 </p>
 
-<br/>
-
-
-
-<br/>
-
-![Demo Placeholder](https://placehold.co/960x480/166534/86efac?text=LLM+Evaluation+Framework+%E2%80%94+Demo+Coming+Soon&font=raleway)
-
-</div>
 
 ---
 
