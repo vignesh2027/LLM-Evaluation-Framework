@@ -11,8 +11,7 @@
 
 <br/>
 
-| 🌐 [Live Docs](https://vignesh2027.github.io/LLM-Evaluation-Framework/) | 🤗 [HuggingFace](https://huggingface.co/datasets/vigneshwar234/llm-eval-benchmark) | 🐙 [GitHub](https://github.com/vignesh2027/LLM-Evaluation-Framework) | ⭐ [Star the Repo](#) |
-|:---:|:---:|:---:|:---:|
+
 
 <br/>
 
