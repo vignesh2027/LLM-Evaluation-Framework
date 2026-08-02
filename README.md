@@ -47,11 +47,11 @@
 The LLM landscape is evolving at breakneck speed. New models appear every week, each claiming to be state-of-the-art. But how do you **actually know** which model is best for *your* use case?
 
 Most existing benchmarking tools:
-- ❌ Evaluate only a single model at a time
-- ❌ Ignore latency and real-world cost
-- ❌ Don't detect hallucinations
-- ❌ Require complex setup
-- ❌ Lack a usable dashboard
+- Evaluate only a single model at a time
+-  Ignore latency and real-world cost
+-  Don't detect hallucinations
+-  Require complex setup
+-  Lack a usable dashboard
 
 **This framework solves all of that.** It's the only open-source tool that evaluates GPT-4, Claude, Gemini, Mistral, and Llama **side by side** — on the same prompts — with 5 production-relevant metrics, a beautiful Streamlit dashboard, a REST API, and a CLI.
 
