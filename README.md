@@ -9,18 +9,6 @@
   Measure accuracy, latency, cost, hallucination, and reasoning quality across any LLM — side by side.
 </p>
 
-[![CI](https://github.com/vignesh2027/LLM-Evaluation-Framework/actions/workflows/ci.yml/badge.svg)](https://github.com/vignesh2027/LLM-Evaluation-Framework/actions/workflows/ci.yml)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-22c55e.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-eab308.svg?style=flat-square)](LICENSE)
-[![PyPI](https://img.shields.io/badge/pypi-1.0.0-f97316.svg?style=flat-square&logo=pypi&logoColor=white)](https://pypi.org/project/llm-evaluation-framework/)
-[![HuggingFace Dataset](https://img.shields.io/badge/🤗-Dataset-ffcc00.svg?style=flat-square)](https://huggingface.co/datasets/vigneshwar234/llm-eval-benchmark)
-[![GitHub Pages](https://img.shields.io/badge/Docs-GitHub%20Pages-22c55e.svg?style=flat-square&logo=github&logoColor=white)](https://vignesh2027.github.io/LLM-Evaluation-Framework/)
-[![Streamlit](https://img.shields.io/badge/Dashboard-Streamlit-ef4444.svg?style=flat-square&logo=streamlit&logoColor=white)](https://vignesh2027.github.io/LLM-Evaluation-Framework/)
-[![Stars](https://img.shields.io/github/stars/vignesh2027/LLM-Evaluation-Framework?style=flat-square&color=eab308&logo=github)](https://github.com/vignesh2027/LLM-Evaluation-Framework/stargazers)
-[![Forks](https://img.shields.io/github/forks/vignesh2027/LLM-Evaluation-Framework?style=flat-square&color=22c55e&logo=github)](https://github.com/vignesh2027/LLM-Evaluation-Framework/network)
-[![Issues](https://img.shields.io/github/issues/vignesh2027/LLM-Evaluation-Framework?style=flat-square&color=f97316)](https://github.com/vignesh2027/LLM-Evaluation-Framework/issues)
-[![Coverage](https://img.shields.io/badge/coverage-95%25-22c55e?style=flat-square)](https://github.com/vignesh2027/LLM-Evaluation-Framework/actions)
-
 <br/>
 
 | 🌐 [Live Docs](https://vignesh2027.github.io/LLM-Evaluation-Framework/) | 🤗 [HuggingFace](https://huggingface.co/datasets/vigneshwar234/llm-eval-benchmark) | 🐙 [GitHub](https://github.com/vignesh2027/LLM-Evaluation-Framework) | ⭐ [Star the Repo](#) |
